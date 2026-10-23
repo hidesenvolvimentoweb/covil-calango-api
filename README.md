@@ -18,4 +18,14 @@ Esse projeto é uma API para ser consumida pelos demais sistemas da Covil do Cal
 
 Atualmente o sistema está sendo servido no [render](http://render.com/) e exposto por essa [url](https://covil-calango-api.onrender.com).
 
+## Executando com Docker Compose
 
+Na pasta do backend, construa e inicie a API e o PostgreSQL local:
+
+```bash
+docker compose up --build
+```
+
+A API ficará disponível em <http://localhost:8081>. Para executar em segundo plano, use `docker compose up --build -d`; para parar os serviços, use `docker compose down`. Os dados do PostgreSQL ficam no volume `postgres-data`.
+
+O compose usa credenciais locais de desenvolvimento por padrão. Para personalizá-las, defina `POSTGRES_DB`, `POSTGRES_USER` e `POSTGRES_PASSWORD` no ambiente ou em um arquivo `.env` na pasta do backend. A porta publicada pela API também pode ser alterada com `API_PORT` (padrão `8081`).
