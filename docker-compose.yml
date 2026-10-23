@@ -1,5 +1,5 @@
 services:
-  db:
+  database:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-covil_calango}
@@ -14,7 +14,7 @@ services:
       retries: 10
     restart: unless-stopped
 
-  api:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
