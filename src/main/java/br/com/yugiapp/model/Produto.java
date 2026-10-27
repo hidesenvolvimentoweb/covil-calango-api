@@ -24,6 +24,9 @@ public class Produto implements Serializable {
     @Column(name = "NOME")
     private String nome;
 
+    @Column(name = "CATEGORIA")
+    private String categoria;
+
     @Column(name = "IMAGEM")
     private String imagem;
 
