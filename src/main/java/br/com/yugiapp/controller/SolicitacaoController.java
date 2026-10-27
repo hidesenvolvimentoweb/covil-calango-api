@@ -2,6 +2,7 @@ package br.com.yugiapp.controller;
 
 import br.com.yugiapp.dto.SolicitacaoFilterRequestDTO;
 import br.com.yugiapp.dto.SolicitacaoRequestDTO;
+import br.com.yugiapp.enums.StatusSolicitacaoEnum;
 import br.com.yugiapp.model.Solicitacao;
 import br.com.yugiapp.service.SolicitacaoService;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +37,18 @@ public class SolicitacaoController {
     public void handleSessionSubscribeEvent(SessionSubscribeEvent event) {
         SimpMessageHeaderAccessor headerAccessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
         String simpSessionId = Optional.ofNullable(headerAccessor.getSessionId()).orElseThrow();
-        messagingTemplate.convertAndSend("/topic/session/" + simpSessionId, simpSessionId);
+        String destination = headerAccessor.getDestination();
+        if ("/topic/session/*".equals(destination)) {
+            messagingTemplate.convertAndSend("/topic/session/" + simpSessionId, simpSessionId);
+            return;
+        }
+
+        if (destination != null && destination.startsWith("/topic/comanda/")) {
+            String requestId = destination.substring("/topic/comanda/".length());
+            solicitacaoService.findBySessionId(requestId)
+                    .filter(solicitacao -> !StatusSolicitacaoEnum.EM_ANALISE.getValue().equals(solicitacao.getStatus()))
+                    .ifPresent(solicitacao -> messagingTemplate.convertAndSend(destination, solicitacao));
+        }
     }
 
     @MessageMapping("/solicitacao/solicitar")
@@ -48,7 +60,7 @@ public class SolicitacaoController {
     @MessageMapping("/solicitacao/aceitar")
     public void aceitarSolicitacao(Solicitacao solicitacaoRequest) {
         Solicitacao solicitacao = solicitacaoService.getById(solicitacaoRequest.getId());
-        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.aceitarSolicitacao(solicitacao));
+        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.aceitarSolicitacao((solicitacao)));
     }
 
     @MessageMapping("/solicitacao/recusar")

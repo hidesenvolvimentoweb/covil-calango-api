@@ -13,5 +13,6 @@ public class SolicitacaoRequestDTO {
 
     String usuario;
     String email;
+    String requestId;
 
 }

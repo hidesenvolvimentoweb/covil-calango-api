@@ -9,12 +9,14 @@ import br.com.yugiapp.model.Solicitacao;
 import br.com.yugiapp.model.Usuario;
 import br.com.yugiapp.repository.SolicitacaoRepository;
 import br.com.yugiapp.specs.SolicitacaoSpecifications;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -47,10 +49,15 @@ public class SolicitacaoService {
     }
 
     public Solicitacao buildNovaSolicitacao(SolicitacaoRequestDTO solicitacaoRequestDTO, String sessionId) {
+        String requestId = Optional.ofNullable(solicitacaoRequestDTO.getRequestId())
+                .filter(id -> !id.isBlank())
+                .map(UUID::fromString)
+                .map(UUID::toString)
+                .orElse(sessionId);
         return Solicitacao.builder()
                 .nome(solicitacaoRequestDTO.getUsuario().replaceAll("\"", ""))
                 .email(solicitacaoRequestDTO.getEmail())
-                .sessionId(sessionId)
+                .sessionId(requestId)
                 .dataHora(LocalDateTime.now())
                 .status(StatusSolicitacaoEnum.EM_ANALISE.getValue())
                 .build();
@@ -60,18 +67,18 @@ public class SolicitacaoService {
         return solicitacaoRepository.save(solicitacao);
     }
 
+    @Transactional
     public Solicitacao alterarStatus(Solicitacao solicitacao, StatusSolicitacaoEnum statusSolicitacaoEnum) {
         solicitacao.setStatus(statusSolicitacaoEnum.getValue());
         return save(solicitacao);
     }
 
+    @Transactional
     public Solicitacao aceitarSolicitacao(Solicitacao solicitacao) {
-        // TODO: reavaliar criação do usuário ao aceitar solicitacao, lógica não está fazendo sentido pois qualquer um consegue acessar via email
-        Optional<Usuario> usuarioSolicitacao = usuarioService.getByEmail(solicitacao.getEmail());
-        Comanda comandaVisitante = comandaService.gerarComanda(usuarioSolicitacao.orElseGet(() -> usuarioService.criarNovoUsuario(solicitacao)));
+        Comanda comandaVisitante = comandaService.gerarComanda(Usuario.builder().id(1L).build());
         Solicitacao solicitacaoAceita = alterarStatus(solicitacao, StatusSolicitacaoEnum.ACEITA);
         solicitacaoAceita.setComanda(comandaService.alterarStatus(comandaVisitante.getNumero(), StatusComandaEnum.ABERTA));
-        return solicitacaoAceita;
+        return save(solicitacaoAceita);
     }
 
     public Solicitacao recusarSolicitacao(Solicitacao solicitacao) {
