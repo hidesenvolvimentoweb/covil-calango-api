@@ -20,7 +20,8 @@ public class Pedido implements Serializable {
 
     @Id
     @Column(name = "ID")
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @SequenceGenerator(name = "pedidoIdGenerator", sequenceName = "tb_pedido_seq", schema = "public", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "pedidoIdGenerator")
     private Long id;
 
     @Column(name = "STATUS")

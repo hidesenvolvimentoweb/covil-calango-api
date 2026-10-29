@@ -55,6 +55,7 @@ public class ComandaService {
         return ComandaResponseDTO.builder()
                 .numero(comandaCompleta.getNumero())
                 .dataHoraEntrada(comandaCompleta.getDataHoraEntrada())
+                .nomeCliente(comandaCompleta.getNomeCliente())
                 .usuario(usuarioService.criarUsuarioConvidado(usuario.getNome()))
                 .build();
     }
@@ -64,9 +65,10 @@ public class ComandaService {
                 Comanda.builder()
                         .dataHoraEntrada(LocalDateTime.now())
                         .usuario(usuario)
+                        .nomeCliente(usuario.getNome())
                         .status(StatusComandaEnum.EM_ANALISE.getValue())
                         .build());
-        comandaSemNumero.setNumero(String.valueOf(HOJE.getYear()) + HOJE.getMonthValue() + HOJE.getDayOfMonth() + comandaSemNumero.getId());
+        comandaSemNumero.setNumero(String.valueOf(HOJE.getYear()) + HOJE.getDayOfMonth() + "-" + comandaSemNumero.getId());
         return comandaRepository.save(comandaSemNumero);
     }
 

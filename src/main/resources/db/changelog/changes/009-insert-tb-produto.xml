@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        logicalFilePath="db/changelog/changes/009-seed-tb-produto.xml"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="020-seed-tb-produto" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_produto (nome, ingredientes, valor, imagem, prazo, categoria)
+            SELECT produto.nome, produto.ingredientes, produto.valor, produto.imagem,
+                   CAST(produto.prazo AS BIGINT), produto.categoria
+            FROM (VALUES
+                ('Suco Del Vale', 'Uva ou Laranja', 7.0, '', NULL, 'Bebidas'),
+                ('Água Mineral', NULL, 3.5, '', NULL, 'Bebidas'),
+                ('Água Tônica', '360ML', 7.0, '', NULL, 'Bebidas'),
+                ('Água com Gás', '360ML', 4.0, '', NULL, 'Bebidas'),
+                ('Bolo de Pote', 'Chocolate com Creme', 14.0, '', NULL, 'Doces'),
+                ('Chá Gelado', NULL, 7.0, '', NULL, 'Bebidas'),
+                ('Refrigerante Coca Cola Lata', NULL, 7.0, '', NULL, 'Bebidas'),
+                ('Refrigerante Coca Cola Zero Lata', NULL, 7.0, '', NULL, 'Bebidas'),
+                ('Refrigerante Fanta Uva Lata', NULL, 7.0, '', NULL, 'Bebidas'),
+                ('Refrigerante Fanta Laranja Lata', NULL, 7.0, '', NULL, 'Bebidas'),
+                ('Refrigerante Sprite Lata', NULL, 7.0, '', NULL, 'Bebidas'),
+                ('Refrigerante Guaraná Lata', NULL, 7.0, '', NULL, 'Bebidas'),
+                ('Energético Monster', 'Sabores Vaiados', 14.9, '', NULL, 'Bebidas'),
+                ('Cerveja Heineken Lata', '360ML', 10.0, '', NULL, 'Bebidas'),
+                ('Cerveja Budweiser Lata', '360ML', 9.0, '', NULL, 'Bebidas'),
+                ('Esfirra', 'Calabresa, Bacon, Frango, Mussarela, Pistache, Oreo', 14.5, '', NULL, 'Outros'),
+                ('KibeRingela Vegano', '2 Unidades (160g)', 15.9, '', NULL, 'Outros'),
+                ('Bolinho de Babelfish Vegano', '4 Unidades (200g)', 18.9, '', NULL, 'Outros'),
+                ('Porção de Onion Rings', '150g', 12.5, '', NULL, 'Outros'),
+                ('Porção de Batata Frita', '300g', 12.5, '', NULL, 'Outros'),
+                ('Porçao de Batata Frita com Cheddar e Bacon', '300g', 18.5, '', NULL, 'Outros'),
+                ('Combo Dos Amigos (serve 3 pessoas)', '1 Porção de Batata Cheddar e Bacon + 1 Porção de Bolinho de Costela ou bacalhau + 1 porção de onion Rings + 3 Refris Lata ', 59.9, '', NULL, 'Burgers'),
+                ('Hamburguer X-Salada do Covil', 'Bacon, Alface, Tomate, Cheddar e Molho', 23.5, '', NULL, 'Burgers'),
+                ('Hamburguer Rodeio do Covil', 'Cheddar, Bacon, Onion Rings, Maionese Defumada e Ketchup', 27.5, '', NULL, 'Burgers'),
+                ('Hamburgão Duplo do Covil', '2x Carnes, Cheddar, Bacon, Cebola Frita, Maionese Defumada e Ketchup', 37.5, '', NULL, 'Burgers'),
+                ('CheeseBurguer do Covil', 'Cheddar, Maionese e Ketchup', 19.9, '', NULL, 'Burgers'),
+                ('Combo CheeseBurguer do Covil', 'Cheddar, Maionese e Ketchup + Batata e Refri Lata', 31.9, '', NULL, 'Burgers'),
+                ('Combo X-Salada do Covil', 'Hamburguer X-Salada do Covil + Batata e Refri Lata', 34.9, '', NULL, 'Burgers'),
+                ('Combo Rodeio do Covil', 'Hamburguer Rodeio do Covil + Batata e Refri Lata', 38.9, '', NULL, 'Burgers'),
+                ('Combo Hamburgão Duplo do Covil', 'Hamburgão Duplo do Covil + Batata e Refri Lata', 38.9, '', NULL, 'Burgers')
+            ) AS produto(nome, ingredientes, valor, imagem, prazo, categoria)
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM public.tb_produto existente
+                WHERE existente.nome = produto.nome
+            )
+        </sql>
+    </changeSet>
+</databaseChangeLog>

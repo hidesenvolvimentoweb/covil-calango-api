@@ -75,7 +75,7 @@ public class SolicitacaoService {
 
     @Transactional
     public Solicitacao aceitarSolicitacao(Solicitacao solicitacao) {
-        Comanda comandaVisitante = comandaService.gerarComanda(Usuario.builder().id(1L).build());
+        Comanda comandaVisitante = comandaService.gerarComanda(Usuario.builder().nome(solicitacao.getNome()).id(1L).build());
         Solicitacao solicitacaoAceita = alterarStatus(solicitacao, StatusSolicitacaoEnum.ACEITA);
         solicitacaoAceita.setComanda(comandaService.alterarStatus(comandaVisitante.getNumero(), StatusComandaEnum.ABERTA));
         return save(solicitacaoAceita);

@@ -16,6 +16,7 @@ import java.util.List;
 public class ComandaFilterRequestDTO {
 
     List<String> status;
+
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     LocalDateTime dataHoraEntrada;
 }

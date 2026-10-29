@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="003-create-tb-usuario" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="tb_usuario"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="public" tableName="tb_usuario">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_usuario" nullable="false"/>
+            </column>
+            <column name="nome" type="VARCHAR(255)"/>
+            <column name="contato" type="VARCHAR(255)"/>
+            <column name="email" type="VARCHAR(255)">
+                <constraints unique="true" uniqueConstraintName="uk_tb_usuario_email"/>
+            </column>
+            <column name="password" type="VARCHAR(255)"/>
+        </createTable>
+    </changeSet>
+    <changeSet id="004-seed-usuario-visitante" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_usuario (id, nome)
+            VALUES (1, 'Visitante')
+            ON CONFLICT (id) DO NOTHING
+        </sql>
+    </changeSet>
+    <changeSet id="005-create-tb-usuario-sequence" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <sequenceExists schemaName="public" sequenceName="tb_usuario_seq"/>
+            </not>
+        </preConditions>
+        <createSequence schemaName="public" sequenceName="tb_usuario_seq" startValue="1" incrementBy="1"/>
+    </changeSet>
+    <changeSet id="006-sync-tb-usuario-sequence" author="covil-calango">
+        <sql>
+            SELECT setval('public.tb_usuario_seq', GREATEST(COALESCE(MAX(id), 0) + 1, 1), false)
+            FROM public.tb_usuario
+        </sql>
+    </changeSet>
+    <changeSet id="019-upsert-usuario-visitante" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_usuario
+                (id, contato, email, nome, "password")
+            VALUES
+                (1, NULL, NULL, 'Visitante', 'password')
+            ON CONFLICT (id) DO UPDATE
+            SET contato = EXCLUDED.contato,
+                email = EXCLUDED.email,
+                nome = EXCLUDED.nome,
+                "password" = EXCLUDED."password"
+        </sql>
+    </changeSet>
+    <changeSet id="029-align-tb-usuario-sequence-increment" author="covil-calango">
+        <alterSequence schemaName="public" sequenceName="tb_usuario_seq" incrementBy="1"/>
+    </changeSet>
+</databaseChangeLog>

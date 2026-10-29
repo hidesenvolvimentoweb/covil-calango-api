@@ -16,6 +16,7 @@ public class ComandaConverter {
     public ComandaResponseDTO toResponseDTO(Comanda entity) {
         return ComandaResponseDTO.builder()
                 .usuario(UsuarioConvidadoResponseDTO.builder().nome(entity.getUsuario().getNome()).build())
+                .nomeCliente(entity.getNomeCliente())
                 .numero(entity.getNumero())
                 .dataHoraEntrada(entity.getDataHoraEntrada())
                 .dataHoraSaida(entity.getDataHoraSaida())

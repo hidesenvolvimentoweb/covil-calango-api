@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="014-create-tb-parametro" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="tb_parametro"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="public" tableName="tb_parametro">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_parametro" nullable="false"/>
+            </column>
+            <column name="nome" type="VARCHAR(255)"/>
+            <column name="descricao" type="VARCHAR(255)"/>
+        </createTable>
+    </changeSet>
+    <changeSet id="015-create-tb-parametro-sequence" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <sequenceExists schemaName="public" sequenceName="tb_parametro_seq"/>
+            </not>
+        </preConditions>
+        <createSequence schemaName="public" sequenceName="tb_parametro_seq" startValue="1" incrementBy="1"/>
+    </changeSet>
+    <changeSet id="016-sync-tb-parametro-sequence" author="covil-calango">
+        <sql>
+            SELECT setval('public.tb_parametro_seq', GREATEST(COALESCE(MAX(id), 0) + 1, 1), false)
+            FROM public.tb_parametro
+        </sql>
+    </changeSet>
+    <changeSet id="028-align-tb-parametro-sequence-increment" author="covil-calango">
+        <alterSequence schemaName="public" sequenceName="tb_parametro_seq" incrementBy="1"/>
+    </changeSet>
+</databaseChangeLog>

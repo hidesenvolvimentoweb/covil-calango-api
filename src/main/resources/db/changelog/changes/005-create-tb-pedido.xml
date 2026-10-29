@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="011-create-tb-pedido" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="tb_pedido"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="public" tableName="tb_pedido">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_pedido" nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(255)"/>
+            <column name="data_hora" type="TIMESTAMP WITHOUT TIME ZONE"/>
+            <column name="observacao" type="VARCHAR(255)"/>
+            <column name="fk_produto" type="BIGINT"/>
+            <column name="fk_comanda" type="BIGINT"/>
+            <column name="quantidade" type="BIGINT"/>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableSchemaName="public"
+                baseTableName="tb_pedido"
+                baseColumnNames="fk_produto"
+                constraintName="fk_tb_pedido_produto"
+                referencedTableSchemaName="public"
+                referencedTableName="tb_produto"
+                referencedColumnNames="id"/>
+        <addForeignKeyConstraint
+                baseTableSchemaName="public"
+                baseTableName="tb_pedido"
+                baseColumnNames="fk_comanda"
+                constraintName="fk_tb_pedido_comanda"
+                referencedTableSchemaName="public"
+                referencedTableName="tb_comanda"
+                referencedColumnNames="id"/>
+    </changeSet>
+    <changeSet id="012-create-tb-pedido-sequence" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <sequenceExists schemaName="public" sequenceName="tb_pedido_seq"/>
+            </not>
+        </preConditions>
+        <createSequence schemaName="public" sequenceName="tb_pedido_seq" startValue="1" incrementBy="1"/>
+    </changeSet>
+    <changeSet id="013-sync-tb-pedido-sequence" author="covil-calango">
+        <sql>
+            SELECT setval('public.tb_pedido_seq', GREATEST(COALESCE(MAX(id), 0) + 1, 1), false)
+            FROM public.tb_pedido
+        </sql>
+    </changeSet>
+    <changeSet id="027-align-tb-pedido-sequence-increment" author="covil-calango">
+        <alterSequence schemaName="public" sequenceName="tb_pedido_seq" incrementBy="1"/>
+    </changeSet>
+</databaseChangeLog>

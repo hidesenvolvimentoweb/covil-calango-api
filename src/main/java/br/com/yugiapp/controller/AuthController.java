@@ -1,7 +1,7 @@
 package br.com.yugiapp.controller;
 
 import br.com.yugiapp.dto.LoginRequestDTO;
-import br.com.yugiapp.model.Usuario;
+import br.com.yugiapp.dto.UsuarioResponseDTO;
 import br.com.yugiapp.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,7 +17,7 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public Usuario login(@RequestBody LoginRequestDTO loginRequestDTO) throws Exception {
+    public UsuarioResponseDTO login(@RequestBody LoginRequestDTO loginRequestDTO) throws Exception {
         return authService.login(loginRequestDTO);
     }
 }

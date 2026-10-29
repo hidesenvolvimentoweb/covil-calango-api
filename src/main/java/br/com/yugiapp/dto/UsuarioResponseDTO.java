@@ -13,15 +13,13 @@ import java.util.List;
 @AllArgsConstructor
 public class UsuarioResponseDTO {
 
+    private Long id;
+
     private String nome;
 
     private String contato;
 
     private String email;
 
-    private String password;
-
-    private String token;
-
-    private List<String> perfis;
+    private List<PerfilResponseDTO> perfis;
 }

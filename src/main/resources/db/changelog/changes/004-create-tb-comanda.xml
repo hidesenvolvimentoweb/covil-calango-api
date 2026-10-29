@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="007-create-tb-comanda" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="tb_comanda"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="public" tableName="tb_comanda">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_comanda" nullable="false"/>
+            </column>
+            <column name="numero" type="VARCHAR(255)"/>
+            <column name="fk_usuario" type="BIGINT"/>
+            <column name="nome_cliente" type="VARCHAR(255)"/>
+            <column name="dt_hora_entrada" type="TIMESTAMP WITHOUT TIME ZONE"/>
+            <column name="dt_hora_saida" type="TIMESTAMP WITHOUT TIME ZONE"/>
+            <column name="status" type="VARCHAR(255)"/>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableSchemaName="public"
+                baseTableName="tb_comanda"
+                baseColumnNames="fk_usuario"
+                constraintName="fk_tb_comanda_usuario"
+                referencedTableSchemaName="public"
+                referencedTableName="tb_usuario"
+                referencedColumnNames="id"/>
+    </changeSet>
+    <changeSet id="008-add-nome-cliente-tb-comanda" author="covil-calango">
+        <sql>
+            ALTER TABLE public.tb_comanda
+            ADD COLUMN IF NOT EXISTS nome_cliente VARCHAR(255)
+        </sql>
+    </changeSet>
+    <changeSet id="009-create-tb-comanda-sequence" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <sequenceExists schemaName="public" sequenceName="tb_comanda_seq"/>
+            </not>
+        </preConditions>
+        <createSequence schemaName="public" sequenceName="tb_comanda_seq" startValue="1" incrementBy="1"/>
+    </changeSet>
+    <changeSet id="010-sync-tb-comanda-sequence" author="covil-calango">
+        <sql>
+            SELECT setval('public.tb_comanda_seq', GREATEST(COALESCE(MAX(id), 0) + 1, 1), false)
+            FROM public.tb_comanda
+        </sql>
+    </changeSet>
+    <changeSet id="026-align-tb-comanda-sequence-increment" author="covil-calango">
+        <alterSequence schemaName="public" sequenceName="tb_comanda_seq" incrementBy="1"/>
+    </changeSet>
+</databaseChangeLog>

@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Entity
 @Table(name = "TB_PERFIL")
 @Builder
@@ -21,5 +23,11 @@ public class Perfil {
 
     @Enumerated(EnumType.STRING)
     private PerfilEnum name;
+
+    @ManyToMany
+    @JoinTable(name = "tb_perfil_permissao",
+            joinColumns = @JoinColumn(name = "id_perfil"),
+            inverseJoinColumns = @JoinColumn(name = "id_permissao"))
+    private List<Permissao> permissoes;
 
 }

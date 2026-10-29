@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        logicalFilePath="db/changelog/changes/013-seed-perfil-permissao.xml"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="024-seed-permissoes-e-perfis" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_permissao (name)
+            SELECT permissao.name
+            FROM (VALUES
+                ('app-cardapio'),
+                ('app-meus-pedidos'),
+                ('app-minha-comanda'),
+                ('app-meu-perfil'),
+                ('web-dashboard'),
+                ('web-solicitacoes'),
+                ('web-pedidos'),
+                ('web-comandas'),
+                ('web-manter-produtos'),
+                ('web-manter-usuarios')
+            ) AS permissao(name)
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM public.tb_permissao existente
+                WHERE existente.name = permissao.name
+            )
+        </sql>
+        <sql>
+            INSERT INTO public.tb_perfil (name)
+            SELECT perfil.name
+            FROM (VALUES
+                ('ROLE_VISITANTE'),
+                ('ROLE_ADMINISTRADOR')
+            ) AS perfil(name)
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM public.tb_perfil existente
+                WHERE existente.name = perfil.name
+            )
+        </sql>
+        <sql>
+            INSERT INTO public.tb_perfil_permissao (id_perfil, id_permissao)
+            SELECT perfil.id, permissao.id
+            FROM public.tb_perfil perfil
+            CROSS JOIN public.tb_permissao permissao
+            WHERE perfil.name = 'ROLE_VISITANTE'
+              AND permissao.name IN (
+                  'app-cardapio',
+                  'app-meus-pedidos',
+                  'app-minha-comanda',
+                  'app-meu-perfil'
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.tb_perfil_permissao existente
+                  WHERE existente.id_perfil = perfil.id
+                    AND existente.id_permissao = permissao.id
+              )
+        </sql>
+        <sql>
+            INSERT INTO public.tb_perfil_permissao (id_perfil, id_permissao)
+            SELECT perfil.id, permissao.id
+            FROM public.tb_perfil perfil
+            CROSS JOIN public.tb_permissao permissao
+            WHERE perfil.name = 'ROLE_ADMINISTRADOR'
+              AND permissao.name IN (
+                  'web-dashboard',
+                  'web-solicitacoes',
+                  'web-pedidos',
+                  'web-comandas',
+                  'web-manter-produtos',
+                  'web-manter-usuarios'
+              )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.tb_perfil_permissao existente
+                  WHERE existente.id_perfil = perfil.id
+                    AND existente.id_permissao = permissao.id
+              )
+        </sql>
+    </changeSet>
+</databaseChangeLog>

@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum PerfilEnum {
-    ROLE_CLIENTE("Cliente"),
+    ROLE_VISITANTE("Visitante"),
     ROLE_ADMINISTRATOR("Administrador");
 
     private final String value;

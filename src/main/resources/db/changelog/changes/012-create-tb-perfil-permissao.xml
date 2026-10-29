@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="023-create-tb-perfil-permissao" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="tb_perfil_permissao"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="public" tableName="tb_perfil_permissao">
+            <column name="id_perfil" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_perfil_permissao" nullable="false"/>
+            </column>
+            <column name="id_permissao" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_perfil_permissao" nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableSchemaName="public"
+                baseTableName="tb_perfil_permissao"
+                baseColumnNames="id_perfil"
+                constraintName="fk_tb_perfil_permissao_perfil"
+                referencedTableSchemaName="public"
+                referencedTableName="tb_perfil"
+                referencedColumnNames="id"/>
+        <addForeignKeyConstraint
+                baseTableSchemaName="public"
+                baseTableName="tb_perfil_permissao"
+                baseColumnNames="id_permissao"
+                constraintName="fk_tb_perfil_permissao_permissao"
+                referencedTableSchemaName="public"
+                referencedTableName="tb_permissao"
+                referencedColumnNames="id"/>
+    </changeSet>
+</databaseChangeLog>

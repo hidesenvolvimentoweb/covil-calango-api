@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        logicalFilePath="db/changelog/changes/010-seed-tb-parametro.xml"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="021-seed-tb-parametro" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_parametro (id, descricao, nome)
+            VALUES
+                (1, 'Valor do Parâmetro Não Informado', 'PARAMETRO_REGRA_PERMANENCIA'),
+                (2, 'Valor do Parâmetro Não Informado', 'PARAMETRO_INFORMACOES_CALANGO')
+            ON CONFLICT (id) DO UPDATE
+            SET descricao = EXCLUDED.descricao,
+                nome = EXCLUDED.nome
+        </sql>
+        <sql>
+            SELECT setval(
+                'public.tb_parametro_seq',
+                GREATEST(COALESCE((SELECT MAX(id) FROM public.tb_parametro), 0) + 1, 1),
+                false
+            )
+        </sql>
+    </changeSet>
+</databaseChangeLog>

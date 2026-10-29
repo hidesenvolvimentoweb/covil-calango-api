@@ -19,7 +19,8 @@ public class Comanda implements Serializable {
 
     @Id
     @Column(name = "ID")
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @SequenceGenerator(name = "comandaIdGenerator", sequenceName = "tb_comanda_seq", schema = "public", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "comandaIdGenerator")
     private Long id;
 
     @Column(name = "NUMERO")
@@ -28,6 +29,9 @@ public class Comanda implements Serializable {
     @ManyToOne
     @JoinColumn(name = "FK_USUARIO")
     private Usuario usuario;
+
+    @Column(name = "NOME_CLIENTE")
+    private String nomeCliente;
 
     @Column(name = "DT_HORA_ENTRADA")
     private LocalDateTime dataHoraEntrada;

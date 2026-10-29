@@ -16,7 +16,8 @@ public class Parametro {
 
     @Id
     @Column(name = "ID")
-    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    @SequenceGenerator(name = "parametroIdGenerator", sequenceName = "tb_parametro_seq", schema = "public", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "parametroIdGenerator")
     private Long id;
 
     @Column(name = "NOME")
