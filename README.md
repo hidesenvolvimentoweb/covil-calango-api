@@ -18,4 +18,16 @@ Esse projeto é uma API para ser consumida pelos demais sistemas da Covil do Cal
 
 Atualmente o sistema está sendo servido no [render](http://render.com/) e exposto por essa [url](https://covil-calango-api.onrender.com).
 
+## Executando com Docker Compose
 
+Configure as variáveis no arquivo `.env` antes de iniciar os serviços:
+
+```env
+POSTGRES_DB=covil_calango
+POSTGRES_USER=covil_calango
+POSTGRES_PASSWORD=defina-uma-senha
+DB_PORT=5432
+API_PORT=8081
+```
+
+Inicie os serviços com `docker compose up -d --build`. O banco fica disponível apenas localmente na porta `DB_PORT`, e a API na porta `API_PORT`.
