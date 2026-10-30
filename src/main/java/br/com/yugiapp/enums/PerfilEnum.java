@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum PerfilEnum {
     ROLE_VISITANTE(0, "Visitante"),
-    ROLE_ADMINISTRATOR(1, "Administrador");
+    ROLE_ADMINISTRADOR(1, "Administrador");
 
     private final Integer codigo;
     private final String value;
@@ -22,8 +22,16 @@ public enum PerfilEnum {
     }
 
     public static PerfilEnum fromValue(String value) {
+        if (value == null) {
+            throw new IllegalArgumentException("Valor inválido para o PerfilEnum: null");
+        }
+
+        if ("ROLE_ADMINISTRATOR".equalsIgnoreCase(value)) {
+            return ROLE_ADMINISTRADOR;
+        }
+
         for (PerfilEnum perfil : PerfilEnum.values()) {
-            if (perfil.getValue().equals(value)) {
+            if (perfil.getValue().equalsIgnoreCase(value) || perfil.name().equalsIgnoreCase(value)) {
                 return perfil;
             }
         }
