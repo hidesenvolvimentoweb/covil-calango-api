@@ -28,17 +28,20 @@
             )
         </sql>
         <sql>
-            INSERT INTO public.tb_perfil (name)
-            SELECT perfil.name
+            INSERT INTO public.tb_perfil (id, name)
+            SELECT perfil.id, perfil.name
             FROM (VALUES
-                ('ROLE_VISITANTE'),
-                ('ROLE_ADMINISTRADOR')
-            ) AS perfil(name)
+                (0, 'ROLE_VISITANTE'),
+                (1, 'ROLE_ADMINISTRADOR')
+            ) AS perfil(id, name)
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM public.tb_perfil existente
-                WHERE existente.name = perfil.name
-            )
+                WHERE existente.id = perfil.id
+                   OR existente.name = perfil.name
+            );
+
+            ALTER SEQUENCE public.tb_perfil_id_seq RESTART WITH 2;
         </sql>
         <sql>
             INSERT INTO public.tb_perfil_permissao (id_perfil, id_permissao)
