@@ -17,8 +17,8 @@ RUN mvn clean package -DskipTests
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=build /app/target/covil-calango-api-0.0.1-SNAPSHOT.jar .
+COPY --from=build /app/target/covil-calango-api-1.0.0-SNAPSHOT.jar .
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "/app/covil-calango-api-0.0.1-SNAPSHOT.jar"]
+ENTRYPOINT ["java", "-jar", "/app/covil-calango-api-1.0.0-SNAPSHOT.jar"]
