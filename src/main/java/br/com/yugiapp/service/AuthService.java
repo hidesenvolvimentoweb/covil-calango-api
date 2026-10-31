@@ -7,6 +7,7 @@ import br.com.yugiapp.enums.TipoProviderAuthEnum;
 import br.com.yugiapp.model.Perfil;
 import br.com.yugiapp.model.Usuario;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import java.util.Optional;
 public class AuthService {
 
     private final UsuarioService usuarioService;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public UsuarioResponseDTO login(LoginRequestDTO loginRequestDTO) throws Exception {
@@ -27,9 +29,12 @@ public class AuthService {
             return toResponseDTO(usuarioService.getByEmail(loginRequestDTO.getEmail()).orElseThrow());
         }
         if (TipoProviderAuthEnum.CREDENTIALS.getValue().equals(loginRequestDTO.getProvider())) {
-            // TODO: validar email e senha criptografados
             Optional<Usuario> usuario = usuarioService.getByEmail(loginRequestDTO.getEmail());
-            if (usuario.isPresent() && usuario.get().getPassword().equals(loginRequestDTO.getSenha())) {
+            if (usuario.isPresent()
+                    && loginRequestDTO.getSenha() != null
+                    && usuario.get().getPassword() != null
+                    && (passwordEncoder.matches(loginRequestDTO.getSenha(), usuario.get().getPassword())
+                    || usuario.get().getPassword().equals(loginRequestDTO.getSenha()))) {
                 return toResponseDTO(usuario.get());
             }
             throw new Exception();
@@ -38,7 +43,7 @@ public class AuthService {
     }
 
     private UsuarioResponseDTO toResponseDTO(Usuario usuario) {
-        List<PerfilResponseDTO> perfis = usuario.getPerfis().stream()
+        List<PerfilResponseDTO> perfis = usuario.getPerfis() == null ? List.of() : usuario.getPerfis().stream()
                 .map(this::toPerfilResponseDTO)
                 .toList();
 
@@ -53,8 +58,9 @@ public class AuthService {
 
     private PerfilResponseDTO toPerfilResponseDTO(Perfil perfil) {
         return PerfilResponseDTO.builder()
-                .name(perfil.getName().name())
-                .permissoes(perfil.getPermissoes().stream()
+                .id(perfil.getId())
+                .name(perfil.getName())
+                .permissoes(perfil.getPermissoes() == null ? List.of() : perfil.getPermissoes().stream()
                         .map(permissao -> permissao.getName())
                         .toList())
                 .build();

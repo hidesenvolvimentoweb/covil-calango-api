@@ -13,6 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 public class PerfilResponseDTO {
 
+    private Long id;
+
     private String name;
 
     private List<String> permissoes;

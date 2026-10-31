@@ -1,6 +1,5 @@
 package br.com.yugiapp.model;
 
-import br.com.yugiapp.enums.PerfilEnum;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,8 +20,7 @@ public class Perfil {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Enumerated(EnumType.STRING)
-    private PerfilEnum name;
+    private String name;
 
     @ManyToMany
     @JoinTable(name = "tb_perfil_permissao",
