@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 @AllArgsConstructor
 public class ParametroResponseDTO {
 
+    private Long id;
     private String nome;
     private String descricao;
 }

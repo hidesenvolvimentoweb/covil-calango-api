@@ -13,5 +13,9 @@ public class ProdutoRequestDTO {
 
     private Long id;
     private String nome;
+    private String categoria;
+    private String imagem;
+    private Double valor;
+    private String ingredientes;
     private Long prazo;
 }
