@@ -34,6 +34,10 @@ public class Usuario implements Serializable {
 
     private String password;
 
+    /** Indica que a senha atual é a temporária gerada na finalização do cadastro e ainda precisa ser trocada. */
+    @Column(name = "SENHA_TEMPORARIA")
+    private boolean senhaTemporaria;
+
     @ManyToMany(fetch = FetchType.EAGER, cascade = CascadeType.PERSIST)
     @JoinTable(name = "tb_usuario_perfil",
             joinColumns = @JoinColumn(name = "id_usuario"),

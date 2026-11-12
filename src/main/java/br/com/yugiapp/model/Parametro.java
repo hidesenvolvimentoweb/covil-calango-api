@@ -1,5 +1,6 @@
 package br.com.yugiapp.model;
 
+import br.com.yugiapp.enums.TipoParametroEnum;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,7 +24,12 @@ public class Parametro {
     @Column(name = "NOME")
     private String nome;
 
-    @Column(name = "DESCRICAO")
+    @Column(name = "DESCRICAO", columnDefinition = "TEXT")
     private String descricao;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "TIPO", nullable = false, length = 20)
+    private TipoParametroEnum tipo = TipoParametroEnum.TEXTO;
 
 }

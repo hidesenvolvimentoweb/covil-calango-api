@@ -17,4 +17,8 @@
     <include file="db/changelog/changes/011-create-tb-permissao.xml"/>
     <include file="db/changelog/changes/012-create-tb-perfil-permissao.xml"/>
     <include file="db/changelog/changes/013-insert-perfil-permissao.xml"/>
+    <include file="db/changelog/changes/014-create-tb-solicitacao-cadastro.xml"/>
+    <include file="db/changelog/changes/015-create-tb-recuperacao-senha.xml"/>
+    <include file="db/changelog/changes/016-add-senha-temporaria-tb-usuario.xml"/>
+    <include file="db/changelog/changes/017-add-tipo-tb-parametro-wpp-bot.xml"/>
 </databaseChangeLog>

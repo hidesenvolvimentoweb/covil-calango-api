@@ -98,6 +98,7 @@ public class UsuarioService {
         usuario.setEmail(request.getEmail());
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             usuario.setPassword(encodePassword(request.getPassword()));
+            usuario.setSenhaTemporaria(false);
         }
         return usuarioRepository.save(usuario);
     }

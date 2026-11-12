@@ -9,7 +9,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -33,6 +35,16 @@ public class ProdutoController {
     @DeleteMapping(path = "{id}")
     public void delete(@PathVariable Long id) {
         produtoService.delete(id);
+    }
+
+    @PostMapping(path = "{id}/imagem", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ProdutoResponseDTO enviarImagem(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        return produtoService.atualizarImagem(id, file);
+    }
+
+    @DeleteMapping(path = "{id}/imagem")
+    public ProdutoResponseDTO removerImagem(@PathVariable Long id) {
+        return produtoService.removerImagem(id);
     }
 
     @GetMapping

@@ -7,7 +7,9 @@ import br.com.yugiapp.enums.TipoProviderAuthEnum;
 import br.com.yugiapp.model.Perfil;
 import br.com.yugiapp.model.Usuario;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,26 +22,39 @@ public class AuthService {
 
     private final UsuarioService usuarioService;
     private final PasswordEncoder passwordEncoder;
+    private final GoogleTokenService googleTokenService;
 
     @Transactional(readOnly = true)
-    public UsuarioResponseDTO login(LoginRequestDTO loginRequestDTO) throws Exception {
+    public UsuarioResponseDTO login(LoginRequestDTO loginRequestDTO) {
         if (TipoProviderAuthEnum.GOOGLE.getValue().equals(loginRequestDTO.getProvider())) {
-            // TODO: validar token recebido
+            // O e-mail vem do token validado no Google, nunca do corpo da requisição.
+            String email = googleTokenService.validarEObterEmail(loginRequestDTO.getIdToken());
             // TODO: avaliar criação do usuário caso seja pelo Aplicativo
-            return toResponseDTO(usuarioService.getByEmail(loginRequestDTO.getEmail()).orElseThrow());
+            return toResponseDTO(usuarioService.getByEmail(email)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                            "Não existe um usuário cadastrado para esta conta Google")));
         }
         if (TipoProviderAuthEnum.CREDENTIALS.getValue().equals(loginRequestDTO.getProvider())) {
-            Optional<Usuario> usuario = usuarioService.getByEmail(loginRequestDTO.getEmail());
-            if (usuario.isPresent()
-                    && loginRequestDTO.getSenha() != null
-                    && usuario.get().getPassword() != null
-                    && (passwordEncoder.matches(loginRequestDTO.getSenha(), usuario.get().getPassword())
-                    || usuario.get().getPassword().equals(loginRequestDTO.getSenha()))) {
-                return toResponseDTO(usuario.get());
+            if (loginRequestDTO.getEmail() == null || loginRequestDTO.getEmail().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o e-mail");
             }
-            throw new Exception();
+            if (loginRequestDTO.getSenha() == null || loginRequestDTO.getSenha().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha");
+            }
+            Usuario usuario = usuarioService.getByEmail(loginRequestDTO.getEmail().trim())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário não encontrado"));
+            if (usuario.getPassword() == null
+                    || !(passwordEncoder.matches(loginRequestDTO.getSenha(), usuario.getPassword())
+                    || usuario.getPassword().equals(loginRequestDTO.getSenha()))) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Senha incorreta");
+            }
+            if (usuario.isSenhaTemporaria()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Antes do primeiro acesso é necessário trocar a senha temporária pelo link enviado para o seu e-mail");
+            }
+            return toResponseDTO(usuario);
         }
-        throw new Exception();
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Forma de autenticação inválida");
     }
 
     private UsuarioResponseDTO toResponseDTO(Usuario usuario) {

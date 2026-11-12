@@ -1,5 +1,6 @@
 package br.com.yugiapp.dto;
 
+import br.com.yugiapp.enums.TipoParametroEnum;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,4 +15,5 @@ public class ParametroResponseDTO {
     private Long id;
     private String nome;
     private String descricao;
+    private TipoParametroEnum tipo;
 }

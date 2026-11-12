@@ -17,6 +17,8 @@ public class LoginRequestDTO implements Serializable {
     private String email;
     private String usuario;
     private String senha;
+    /** ID token devolvido pelo login do Google; validado no servidor. */
+    private String idToken;
     private String provider;
 
 }

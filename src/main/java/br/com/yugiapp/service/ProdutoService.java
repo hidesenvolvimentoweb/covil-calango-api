@@ -13,6 +13,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class ProdutoService {
 
     private final ProdutoRepository produtoRepository;
     private final ProdutoSpecifications produtoSpecifications;
+    private final ArquivoService arquivoService;
 
     @Transactional(readOnly = true)
     public Page<ProdutoResponseDTO> getAll(ProdutoFilterRequestDTO filter, Pageable pageable) {
@@ -61,6 +63,36 @@ public class ProdutoService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Não é possível excluir um produto que já possui pedidos.", exception);
         }
+        arquivoService.excluir(produto.getImagem());
+    }
+
+    /**
+     * Grava a imagem enviada no servidor, associa ao produto e remove a imagem anterior.
+     */
+    @Transactional
+    public ProdutoResponseDTO atualizarImagem(Long id, MultipartFile arquivo) {
+        Produto produto = getById(id);
+        String imagemAnterior = produto.getImagem();
+        String novaImagem = arquivoService.salvarImagem(arquivo, ArquivoService.PASTA_PRODUTOS);
+        try {
+            produto.setImagem(novaImagem);
+            produtoRepository.saveAndFlush(produto);
+        } catch (RuntimeException exception) {
+            arquivoService.excluir(novaImagem);
+            throw exception;
+        }
+        arquivoService.excluir(imagemAnterior);
+        return toResponse(produto);
+    }
+
+    @Transactional
+    public ProdutoResponseDTO removerImagem(Long id) {
+        Produto produto = getById(id);
+        String imagemAnterior = produto.getImagem();
+        produto.setImagem(null);
+        produtoRepository.saveAndFlush(produto);
+        arquivoService.excluir(imagemAnterior);
+        return toResponse(produto);
     }
 
     @Transactional
@@ -81,7 +113,11 @@ public class ProdutoService {
         Produto updated = fromRequest(request);
         produto.setNome(updated.getNome());
         produto.setCategoria(updated.getCategoria());
-        produto.setImagem(updated.getImagem());
+        // A imagem é gerenciada pelos endpoints de upload; só é alterada aqui se uma nova referência for informada.
+        if (updated.getImagem() != null && !updated.getImagem().equals(produto.getImagem())) {
+            arquivoService.excluir(produto.getImagem());
+            produto.setImagem(updated.getImagem());
+        }
         produto.setValor(updated.getValor());
         produto.setIngredientes(updated.getIngredientes());
         produto.setPrazo(updated.getPrazo());
