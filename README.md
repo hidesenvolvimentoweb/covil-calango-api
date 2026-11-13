@@ -26,8 +26,9 @@ Configure as variáveis no arquivo `.env` antes de iniciar os serviços:
 POSTGRES_DB=covil_calango
 POSTGRES_USER=covil_calango
 POSTGRES_PASSWORD=defina-uma-senha
-DB_PORT=5432
+POSTGRES_DB_PORT=5432
 API_PORT=8081
+RESEND_API_KEY=re_sua_api_key_do_resend
 ```
 
-Inicie os serviços com `docker compose up -d --build`. O banco fica disponível apenas localmente na porta `DB_PORT`, e a API na porta `API_PORT`.
+Inicie os serviços com `docker compose up -d --build`. O banco fica disponível apenas localmente na porta `POSTGRES_DB_PORT`, e a API na porta `API_PORT`.

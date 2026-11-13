@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "127.0.0.1:${DB_PORT}:5432"
+      - "127.0.0.1:${POSTGRES_DB_PORT}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -27,11 +27,7 @@ services:
       DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       DATASOURCE_USER: ${POSTGRES_USER}
       DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      MAIL_HOST: ${MAIL_HOST:-}
-      MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:?Defina RESEND_API_KEY no .env}
       WEB_URL: ${WEB_URL:-http://localhost:4200}
       UPLOAD_DIR: /app/uploads
       JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env (minimo 32 caracteres)}
