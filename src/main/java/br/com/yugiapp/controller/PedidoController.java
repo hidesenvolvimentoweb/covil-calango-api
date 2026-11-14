@@ -5,6 +5,7 @@ import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.service.PedidoService;
+import br.com.yugiapp.service.WhatsappService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +19,7 @@ public class PedidoController {
 
     private final PedidoService pedidoService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final WhatsappService whatsappService;
 
     @PostMapping
     public void salvar(@RequestBody PedidoRequestDTO pedido) {
@@ -46,21 +48,34 @@ public class PedidoController {
 
     @PatchMapping(path = "/aceitar/{id}")
     public void aceitarPedido(@PathVariable Long id) {
-        pedidoService.alterarStatus(id, StatusPedidoEnum.EM_ANDAMENTO);
+        notificarAlteracaoStatus(pedidoService.alterarStatus(id, StatusPedidoEnum.EM_ANDAMENTO));
     }
 
     @PatchMapping(path = "/cancelar/{id}")
     public void cancelarPedido(@PathVariable Long id) {
-        pedidoService.alterarStatus(id, StatusPedidoEnum.CANCELADO);
+        notificarAlteracaoStatus(pedidoService.alterarStatus(id, StatusPedidoEnum.CANCELADO));
     }
 
     @PatchMapping(path = "/concluir/{id}")
     public void concluirPedido(@PathVariable Long id) {
-        pedidoService.alterarStatus(id, StatusPedidoEnum.PRONTO);
+        notificarAlteracaoStatus(pedidoService.alterarStatus(id, StatusPedidoEnum.PRONTO));
     }
 
     @PatchMapping(path = "/finalizar/{id}")
     public void finalizarPedido(@PathVariable Long id) {
-        pedidoService.alterarStatus(id, StatusPedidoEnum.FINALIZADO);
+        notificarAlteracaoStatus(pedidoService.alterarStatus(id, StatusPedidoEnum.FINALIZADO));
+    }
+
+    /**
+     * Notifica o cliente dono da comanda sobre a alteração de status do pedido:
+     * em tempo real no app (tópico /topic/pedidos/comanda/{numeroComanda}) e,
+     * se ele consentiu, pelo WhatsApp.
+     */
+    private void notificarAlteracaoStatus(Pedido pedido) {
+        if (pedido.getComanda() == null || pedido.getComanda().getNumero() == null) {
+            return;
+        }
+        messagingTemplate.convertAndSend("/topic/pedidos/comanda/" + pedido.getComanda().getNumero(), pedido);
+        whatsappService.notificarAlteracaoStatusPedido(pedido);
     }
 }

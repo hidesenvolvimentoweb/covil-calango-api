@@ -54,12 +54,18 @@ public class SolicitacaoService {
                 .map(UUID::fromString)
                 .map(UUID::toString)
                 .orElse(sessionId);
+        // Só guarda o celular quando o cliente consentiu em receber as notificações e o número é válido.
+        Optional<String> celular = Boolean.TRUE.equals(solicitacaoRequestDTO.getNotificarWhatsapp())
+                ? WhatsappService.normalizarCelular(solicitacaoRequestDTO.getCelular())
+                : Optional.empty();
         return Solicitacao.builder()
                 .nome(solicitacaoRequestDTO.getUsuario().replaceAll("\"", ""))
                 .email(solicitacaoRequestDTO.getEmail())
                 .sessionId(requestId)
                 .dataHora(LocalDateTime.now())
                 .status(StatusSolicitacaoEnum.EM_ANALISE.getValue())
+                .celular(celular.orElse(null))
+                .notificarWhatsapp(celular.isPresent())
                 .build();
     }
 
@@ -76,6 +82,9 @@ public class SolicitacaoService {
     @Transactional
     public Solicitacao aceitarSolicitacao(Solicitacao solicitacao) {
         Comanda comandaVisitante = comandaService.gerarComanda(Usuario.builder().nome(solicitacao.getNome()).id(1L).build());
+        comandaVisitante.setCelular(solicitacao.getCelular());
+        comandaVisitante.setNotificarWhatsapp(solicitacao.isNotificarWhatsapp());
+        comandaService.save(comandaVisitante);
         Solicitacao solicitacaoAceita = alterarStatus(solicitacao, StatusSolicitacaoEnum.ACEITA);
         solicitacaoAceita.setComanda(comandaService.alterarStatus(comandaVisitante.getNumero(), StatusComandaEnum.ABERTA));
         return save(solicitacaoAceita);

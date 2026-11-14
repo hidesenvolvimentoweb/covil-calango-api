@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="037-add-whatsapp-tb-solicitacao" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="public" tableName="tb_solicitacao" columnName="notificar_whatsapp"/>
+            </not>
+        </preConditions>
+        <addColumn schemaName="public" tableName="tb_solicitacao">
+            <column name="celular" type="VARCHAR(20)"/>
+            <column name="notificar_whatsapp" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+    <changeSet id="038-add-whatsapp-tb-comanda" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="public" tableName="tb_comanda" columnName="notificar_whatsapp"/>
+            </not>
+        </preConditions>
+        <addColumn schemaName="public" tableName="tb_comanda">
+            <column name="celular" type="VARCHAR(20)"/>
+            <column name="notificar_whatsapp" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

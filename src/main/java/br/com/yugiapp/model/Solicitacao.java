@@ -36,6 +36,12 @@ public class Solicitacao {
     @Column(name = "DT_HORA")
     private LocalDateTime dataHora;
 
+    @Column(name = "CELULAR")
+    private String celular;
+
+    @Column(name = "NOTIFICAR_WHATSAPP", nullable = false)
+    private boolean notificarWhatsapp;
+
     @ManyToOne
     @JoinColumn(name = "FK_COMANDA")
     private Comanda comanda;

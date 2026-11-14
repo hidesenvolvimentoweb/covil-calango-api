@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor(onConstructor_ = { @Lazy })
@@ -39,6 +40,10 @@ public class ComandaService {
 
     public Comanda getByNumero(String numero) {
         return comandaRepository.findByNumero(numero).orElseThrow();
+    }
+
+    public Optional<Comanda> findByNumero(String numero) {
+        return comandaRepository.findByNumero(numero);
     }
 
     public ComandaResponseDTO getResponseDTOByNumero(String numero) {

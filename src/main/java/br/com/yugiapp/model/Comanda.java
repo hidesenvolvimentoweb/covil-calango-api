@@ -42,4 +42,12 @@ public class Comanda implements Serializable {
     @Column(name = "STATUS")
     private String status;
 
+    /** Celular (somente dígitos, com DDI) que recebe as notificações dos pedidos pelo WhatsApp. */
+    @Column(name = "CELULAR")
+    private String celular;
+
+    /** Consentimento do cliente para receber as notificações dos pedidos pelo WhatsApp. */
+    @Column(name = "NOTIFICAR_WHATSAPP", nullable = false)
+    private boolean notificarWhatsapp;
+
 }

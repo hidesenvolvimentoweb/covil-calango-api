@@ -4,7 +4,9 @@ import br.com.yugiapp.converter.PedidoConverter;
 import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.dto.PedidoRequestDTO;
 import br.com.yugiapp.dto.PedidoResponseDTO;
+import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusPedidoEnum;
+import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.model.Produto;
 import br.com.yugiapp.repository.PedidoRepository;
@@ -12,7 +14,9 @@ import br.com.yugiapp.specs.PedidoSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,19 +55,23 @@ public class PedidoService {
     }
 
     public Pedido save(PedidoRequestDTO pedidoRequestDTO) {
+        Comanda comanda = comandaService.getByNumero(pedidoRequestDTO.getComanda());
+        if (StatusComandaEnum.FECHADA.getValue().equals(comanda.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Sua comanda foi finalizada. Gere uma nova comanda para fazer pedidos");
+        }
         return pedidoRepository.save(Pedido.builder()
                 .dataHora(LocalDateTime.now())
                 .status(StatusPedidoEnum.SOLICITADO)
                 .produto(Produto.builder().id(pedidoRequestDTO.getProduto().getId()).build())
                 .observacao(pedidoRequestDTO.getObservacao())
                 .quantidade(pedidoRequestDTO.getQuantidade())
-                .comanda(comandaService.getByNumero(pedidoRequestDTO.getComanda()))
+                .comanda(comanda)
                 .build());
     }
 
-    public void alterarStatus(Long id, StatusPedidoEnum status) {
+    public Pedido alterarStatus(Long id, StatusPedidoEnum status) {
         Pedido pedido = getById(id);
         pedido.setStatus(status);
-        pedidoRepository.save(pedido);
+        return pedidoRepository.save(pedido);
     }
 }
