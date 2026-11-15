@@ -3,6 +3,7 @@ package br.com.yugiapp.service;
 import br.com.yugiapp.dto.ProdutoFilterRequestDTO;
 import br.com.yugiapp.dto.ProdutoRequestDTO;
 import br.com.yugiapp.dto.ProdutoResponseDTO;
+import br.com.yugiapp.enums.CategoriaProdutoEnum;
 import br.com.yugiapp.model.Produto;
 import br.com.yugiapp.repository.ProdutoRepository;
 import br.com.yugiapp.specs.ProdutoSpecifications;
@@ -137,7 +138,7 @@ public class ProdutoService {
         }
         return Produto.builder()
                 .nome(request.getNome().trim())
-                .categoria(trimToNull(request.getCategoria()))
+                .categoria(request.getCategoria() != null ? request.getCategoria() : CategoriaProdutoEnum.OUTROS)
                 .imagem(trimToNull(request.getImagem()))
                 .valor(request.getValor())
                 .ingredientes(trimToNull(request.getIngredientes()))

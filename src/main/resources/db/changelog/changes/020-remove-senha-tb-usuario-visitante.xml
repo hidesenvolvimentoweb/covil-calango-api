@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!-- O usuário Visitante não faz login por credenciais e não deve ter senha gravada. -->
+    <changeSet id="040-remove-senha-tb-usuario-visitante" author="covil-calango">
+        <sql>
+            UPDATE public.tb_usuario
+            SET "password" = NULL
+            WHERE id = 1 AND email IS NULL
+        </sql>
+    </changeSet>
+</databaseChangeLog>

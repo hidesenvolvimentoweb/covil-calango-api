@@ -16,4 +16,6 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long>, JpaSpec
    boolean existsByEmailAndIdNot(String email, Long id);
 
    List<Usuario> findAllByPerfis_Id(Long perfilId);
+
+   List<Usuario> findAllByPasswordIsNotNull();
 }

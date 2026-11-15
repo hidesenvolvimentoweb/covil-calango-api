@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!-- Converte as categorias livres para os valores de CategoriaProdutoEnum. -->
+    <changeSet id="039-update-categoria-tb-produto" author="covil-calango">
+        <sql>
+            UPDATE public.tb_produto
+            SET categoria = CASE
+                WHEN categoria IN ('HAMBURGUER', 'BEBIDAS', 'DOCES', 'GELADOS', 'COMBOS', 'OUTROS') THEN categoria
+                WHEN LOWER(TRIM(categoria)) LIKE 'combo%' OR LOWER(TRIM(nome)) LIKE 'combo%' THEN 'COMBOS'
+                WHEN LOWER(TRIM(categoria)) LIKE '%burg%' OR LOWER(TRIM(categoria)) LIKE 'hamb%' THEN 'HAMBURGUER'
+                WHEN LOWER(TRIM(categoria)) LIKE 'bebida%' THEN 'BEBIDAS'
+                WHEN LOWER(TRIM(categoria)) LIKE 'doce%' THEN 'DOCES'
+                WHEN LOWER(TRIM(categoria)) LIKE 'gelado%' THEN 'GELADOS'
+                ELSE 'OUTROS'
+            END;
+        </sql>
+        <addNotNullConstraint schemaName="public" tableName="tb_produto" columnName="categoria"
+                              columnDataType="VARCHAR(255)" defaultNullValue="OUTROS"/>
+    </changeSet>
+</databaseChangeLog>

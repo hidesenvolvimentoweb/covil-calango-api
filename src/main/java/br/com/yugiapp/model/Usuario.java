@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 
 import java.io.Serializable;
 import java.util.List;
@@ -39,7 +40,9 @@ public class Usuario implements Serializable {
     @Column(unique = true)
     private String email;
 
+    /** Sempre o hash BCrypt da senha; nunca a senha em texto puro. */
     @JsonIgnore
+    @ToString.Exclude
     private String password;
 
     /** Indica que a senha atual é a temporária gerada na finalização do cadastro e ainda precisa ser trocada. */

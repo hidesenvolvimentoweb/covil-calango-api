@@ -22,4 +22,6 @@
     <include file="db/changelog/changes/016-add-senha-temporaria-tb-usuario.xml"/>
     <include file="db/changelog/changes/017-add-tipo-tb-parametro-wpp-bot.xml"/>
     <include file="db/changelog/changes/018-add-whatsapp-tb-comanda-tb-solicitacao.xml"/>
+    <include file="db/changelog/changes/019-update-categoria-tb-produto.xml"/>
+    <include file="db/changelog/changes/020-remove-senha-tb-usuario-visitante.xml"/>
 </databaseChangeLog>

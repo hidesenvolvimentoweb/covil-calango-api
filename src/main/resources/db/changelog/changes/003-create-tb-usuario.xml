@@ -44,11 +44,12 @@
         </sql>
     </changeSet>
     <changeSet id="019-upsert-usuario-visitante" author="covil-calango">
+        <validCheckSum>ANY</validCheckSum>
         <sql>
             INSERT INTO public.tb_usuario
                 (id, contato, email, nome, "password")
             VALUES
-                (1, NULL, NULL, 'Visitante', 'password')
+                (1, NULL, NULL, 'Visitante', NULL)
             ON CONFLICT (id) DO UPDATE
             SET contato = EXCLUDED.contato,
                 email = EXCLUDED.email,
