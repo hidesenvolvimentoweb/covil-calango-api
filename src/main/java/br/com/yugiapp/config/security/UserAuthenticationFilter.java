@@ -1,21 +1,16 @@
 package br.com.yugiapp.config.security;
 
-import com.auth0.jwt.interfaces.DecodedJWT;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Autentica a requisição a partir do JWT, lido do cookie {@value AuthCookieService#NOME_COOKIE} (web) ou do
@@ -23,7 +18,7 @@ import java.util.stream.Collectors;
  * ela segue anônima e as regras do {@link JwtSecurityConfig} decidem se a rota exige autenticação.
  * <p>
  * As authorities da requisição são os perfis do token e as permissões associadas a eles no banco
- * ({@link PermissaoPerfilService}); o principal é um {@link UsuarioAutenticado}.
+ * ({@link AutenticacaoJwtService}); o principal é um {@link UsuarioAutenticado}.
  * <p>
  * Proteção contra CSRF: o navegador envia o cookie sozinho, então requisições que alteram dados autenticadas
  * pelo cookie precisam do cabeçalho {@value #CABECALHO_CSRF}. Um site de terceiros só consegue enviar esse
@@ -34,42 +29,30 @@ public class UserAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String CABECALHO_CSRF = "X-Requested-With";
     private static final Set<String> METODOS_SEGUROS = Set.of("GET", "HEAD", "OPTIONS");
-    private static final String PREFIXO_BEARER = "Bearer ";
 
-    private final JwtTokenService jwtTokenService;
+    private final AutenticacaoJwtService autenticacaoJwtService;
     private final AuthCookieService authCookieService;
-    private final PermissaoPerfilService permissaoPerfilService;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
-        String tokenCabecalho = lerCabecalho(request);
-        String token = tokenCabecalho != null ? tokenCabecalho : authCookieService.ler(request);
+        String tokenCabecalho = lerBearer(request.getHeader("Authorization"));
         boolean viaCookie = tokenCabecalho == null;
+        String token = viaCookie ? authCookieService.ler(request) : tokenCabecalho;
 
-        jwtTokenService.validar(token)
-                .filter(jwt -> !viaCookie || METODOS_SEGUROS.contains(request.getMethod())
-                        || request.getHeader(CABECALHO_CSRF) != null)
-                .ifPresent(this::autenticar);
+        if (!viaCookie || METODOS_SEGUROS.contains(request.getMethod()) || request.getHeader(CABECALHO_CSRF) != null) {
+            autenticacaoJwtService.autenticar(token)
+                    .ifPresent(autenticacao -> SecurityContextHolder.getContext().setAuthentication(autenticacao));
+        }
 
         filterChain.doFilter(request, response);
     }
 
-    private void autenticar(DecodedJWT jwt) {
-        List<String> perfis = jwt.getClaim(JwtTokenService.CLAIM_PERFIS).asList(String.class);
-        Set<SimpleGrantedAuthority> authorities = permissaoPerfilService.autoridades(perfis).stream()
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toSet());
-        UsuarioAutenticado usuario = new UsuarioAutenticado(jwt.getSubject(),
-                jwt.getClaim(JwtTokenService.CLAIM_COMANDA).asString());
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(usuario, null, authorities));
-    }
-
-    private String lerCabecalho(HttpServletRequest request) {
-        String authorization = request.getHeader("Authorization");
-        if (authorization != null && authorization.startsWith(PREFIXO_BEARER)) {
-            String token = authorization.substring(PREFIXO_BEARER.length()).trim();
+    /** Extrai o token de um valor {@code Bearer <token>}; {@code null} quando ausente ou em outro formato. */
+    public static String lerBearer(String authorization) {
+        String prefixo = "Bearer ";
+        if (authorization != null && authorization.startsWith(prefixo)) {
+            String token = authorization.substring(prefixo.length()).trim();
             return token.isEmpty() ? null : token;
         }
         return null;

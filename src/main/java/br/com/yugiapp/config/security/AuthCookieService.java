@@ -22,6 +22,9 @@ import java.util.Arrays;
 public class AuthCookieService {
 
     public static final String NOME_COOKIE = "covil_token";
+    /** Path "/" para o cookie chegar também ao handshake do WebSocket ({@code /covil-ws}), além de {@code /api}. */
+    private static final String PATH = "/";
+    private static final String PATH_LEGADO = "/api";
 
     private final boolean secure;
     private final String sameSite;
@@ -43,6 +46,14 @@ public class AuthCookieService {
         return base("").maxAge(Duration.ZERO).build();
     }
 
+    /**
+     * Remove o cookie gravado pelas versões anteriores, que usavam {@code Path=/api}. O path faz parte da
+     * identidade do cookie, então ele só é removido por um Set-Cookie no mesmo path.
+     */
+    public ResponseCookie limparLegado() {
+        return base("").path(PATH_LEGADO).maxAge(Duration.ZERO).build();
+    }
+
     public String ler(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
@@ -60,6 +71,6 @@ public class AuthCookieService {
                 .httpOnly(true)
                 .secure(secure)
                 .sameSite(sameSite)
-                .path("/api");
+                .path(PATH);
     }
 }

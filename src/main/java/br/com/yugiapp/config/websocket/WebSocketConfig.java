@@ -1,6 +1,8 @@
 package br.com.yugiapp.config.websocket;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -8,7 +10,11 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private final WebSocketHandshakeInterceptor handshakeInterceptor;
+    private final WebSocketSecurityInterceptor securityInterceptor;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -16,9 +22,21 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         config.setApplicationDestinationPrefixes("/app");
     }
 
+    /**
+     * Qualquer origem pode conectar (o app roda no WebView, com origem própria); o que cada conexão pode fazer é
+     * decidido por mensagem no {@link WebSocketSecurityInterceptor}, e o cookie de sessão só vale para origens
+     * confiáveis ({@link WebSocketHandshakeInterceptor}).
+     */
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/covil-ws").setAllowedOriginPatterns("*").withSockJS();
+        registry.addEndpoint("/covil-ws")
+                .setAllowedOriginPatterns("*")
+                .addInterceptors(handshakeInterceptor)
+                .withSockJS();
     }
 
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(securityInterceptor);
+    }
 }

@@ -25,6 +25,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SolicitacaoService {
 
+    static final int TAMANHO_MAXIMO_NOME = 60;
+    private static final int TAMANHO_MAXIMO_EMAIL = 255;
+
     private final SolicitacaoRepository solicitacaoRepository;
     private final ComandaService comandaService;
     private final UsuarioService usuarioService;
@@ -41,7 +44,7 @@ public class SolicitacaoService {
     }
 
     public Optional<Solicitacao> findBySessionId(String id) {
-        return solicitacaoRepository.findBySessionId(id);
+        return solicitacaoRepository.findFirstBySessionIdOrderByIdDesc(id);
     }
 
     public Solicitacao getById(Long id) {
@@ -52,19 +55,46 @@ public class SolicitacaoService {
         solicitacaoRepository.deleteById(id);
     }
 
-    public Solicitacao buildNovaSolicitacao(SolicitacaoRequestDTO solicitacaoRequestDTO, String sessionId) {
-        String requestId = Optional.ofNullable(solicitacaoRequestDTO.getRequestId())
-                .filter(id -> !id.isBlank())
-                .map(UUID::fromString)
-                .map(UUID::toString)
-                .orElse(sessionId);
+    /**
+     * Registra a solicitação de comanda feita pelo app. O {@code requestId} (UUID gerado pelo app) identifica o
+     * tópico de resposta e funciona como segredo dele, por isso é obrigatório e não pode ser reaproveitado.
+     *
+     * @return a solicitação criada, ou vazio quando já existe uma do mesmo {@code requestId} (reenvio).
+     */
+    @Transactional
+    public Optional<Solicitacao> solicitar(SolicitacaoRequestDTO solicitacaoRequestDTO) {
+        Solicitacao nova = buildNovaSolicitacao(solicitacaoRequestDTO);
+        if (solicitacaoRepository.existsBySessionId(nova.getSessionId())) {
+            return Optional.empty();
+        }
+        return Optional.of(save(nova));
+    }
+
+    Solicitacao buildNovaSolicitacao(SolicitacaoRequestDTO solicitacaoRequestDTO) {
+        if (solicitacaoRequestDTO == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solicitação vazia");
+        }
+        String requestId = normalizarRequestId(solicitacaoRequestDTO.getRequestId());
+        String nome = Optional.ofNullable(solicitacaoRequestDTO.getUsuario())
+                .map(valor -> valor.replace("\"", "").trim())
+                .filter(valor -> !valor.isEmpty())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o seu nome"));
+        if (nome.length() > TAMANHO_MAXIMO_NOME) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "O nome deve ter no máximo " + TAMANHO_MAXIMO_NOME + " caracteres");
+        }
+        String email = Optional.ofNullable(solicitacaoRequestDTO.getEmail()).map(String::trim).filter(valor -> !valor.isEmpty())
+                .orElse(null);
+        if (email != null && email.length() > TAMANHO_MAXIMO_EMAIL) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "E-mail inválido");
+        }
         // Só guarda o celular quando o cliente consentiu em receber as notificações e o número é válido.
         Optional<String> celular = Boolean.TRUE.equals(solicitacaoRequestDTO.getNotificarWhatsapp())
                 ? WhatsappService.normalizarCelular(solicitacaoRequestDTO.getCelular())
                 : Optional.empty();
         return Solicitacao.builder()
-                .nome(solicitacaoRequestDTO.getUsuario().replaceAll("\"", ""))
-                .email(solicitacaoRequestDTO.getEmail())
+                .nome(nome)
+                .email(email)
                 .sessionId(requestId)
                 .dataHora(LocalDateTime.now())
                 .status(StatusSolicitacaoEnum.EM_ANALISE.getValue())
@@ -111,11 +141,24 @@ public class SolicitacaoService {
         return solicitacao;
     }
 
+    @Transactional
     public Solicitacao recusarSolicitacao(Solicitacao solicitacao) {
+        // Uma solicitação já aceita tem comanda aberta e token emitido: recusá-la agora não desfaria isso.
         if (!StatusSolicitacaoEnum.EM_ANALISE.getValue().equals(solicitacao.getStatus())) {
-            deleteById(solicitacao.getId());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta solicitação já foi respondida");
         }
         return alterarStatus(solicitacao, StatusSolicitacaoEnum.RECUSADA);
+    }
+
+    private static String normalizarRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Identificador da solicitação ausente");
+        }
+        try {
+            return UUID.fromString(requestId.trim()).toString();
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Identificador da solicitação inválido");
+        }
     }
 
 }

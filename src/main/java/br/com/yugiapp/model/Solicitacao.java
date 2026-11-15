@@ -1,5 +1,6 @@
 package br.com.yugiapp.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -22,6 +23,8 @@ public class Solicitacao {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** requestId do app: identifica o tópico de resposta /topic/comanda/{sessionId}, por isso nunca sai no JSON. */
+    @JsonIgnore
     @Column(name = "SESSIONID")
     private String sessionId;
 

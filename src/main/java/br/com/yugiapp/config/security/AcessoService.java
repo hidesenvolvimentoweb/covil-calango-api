@@ -1,13 +1,10 @@
 package br.com.yugiapp.config.security;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Arrays;
 import java.util.Optional;
 
 /**
@@ -19,12 +16,7 @@ public class AcessoService {
 
     /** Comanda do visitante autenticado, quando a requisição vem do app. */
     public Optional<String> comandaDoVisitante() {
-        Authentication autenticacao = SecurityContextHolder.getContext().getAuthentication();
-        if (autenticacao != null && autenticacao.getPrincipal() instanceof UsuarioAutenticado usuario
-                && usuario.isVisitante()) {
-            return Optional.of(usuario.numeroComanda());
-        }
-        return Optional.empty();
+        return AutenticacaoJwtService.comandaDoVisitante(SecurityContextHolder.getContext().getAuthentication());
     }
 
     /**
@@ -43,12 +35,6 @@ public class AcessoService {
     }
 
     public boolean possuiAlguma(String... autoridades) {
-        Authentication autenticacao = SecurityContextHolder.getContext().getAuthentication();
-        if (autenticacao == null) {
-            return false;
-        }
-        return autenticacao.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch(autoridade -> Arrays.asList(autoridades).contains(autoridade));
+        return AutenticacaoJwtService.possuiAlguma(SecurityContextHolder.getContext().getAuthentication(), autoridades);
     }
 }

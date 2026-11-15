@@ -1,5 +1,6 @@
 package br.com.yugiapp.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -42,11 +43,17 @@ public class Comanda implements Serializable {
     @Column(name = "STATUS")
     private String status;
 
+    /*
+     * A entidade chega ao JSON aninhada nos pedidos (tópicos do WebSocket e rotas do app). O celular é dado pessoal
+     * e só é usado internamente, para as notificações do WhatsApp.
+     */
     /** Celular (somente dígitos, com DDI) que recebe as notificações dos pedidos pelo WhatsApp. */
+    @JsonIgnore
     @Column(name = "CELULAR")
     private String celular;
 
     /** Consentimento do cliente para receber as notificações dos pedidos pelo WhatsApp. */
+    @JsonIgnore
     @Column(name = "NOTIFICAR_WHATSAPP", nullable = false)
     private boolean notificarWhatsapp;
 

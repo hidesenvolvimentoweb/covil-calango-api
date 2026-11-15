@@ -43,14 +43,16 @@ public class AuthController {
                 .toList();
         String token = jwtTokenService.generateToken(usuario.getEmail(), perfis);
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, authCookieService.criar(token, jwtTokenService.getValidade()).toString())
+                .header(HttpHeaders.SET_COOKIE, authCookieService.criar(token, jwtTokenService.getValidade()).toString(),
+                        authCookieService.limparLegado().toString())
                 .body(usuario);
     }
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout() {
         return ResponseEntity.noContent()
-                .header(HttpHeaders.SET_COOKIE, authCookieService.limpar().toString())
+                .header(HttpHeaders.SET_COOKIE, authCookieService.limpar().toString(),
+                        authCookieService.limparLegado().toString())
                 .build();
     }
 

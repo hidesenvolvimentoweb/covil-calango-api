@@ -4,7 +4,6 @@ import br.com.yugiapp.service.ArquivoService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -25,7 +24,6 @@ import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,34 +34,30 @@ import static br.com.yugiapp.config.security.Permissoes.*;
 @EnableWebSecurity
 public class JwtSecurityConfig {
 
-    private final List<String> origensConfiaveis;
+    private final OrigensConfiaveis origensConfiaveis;
     private final ObjectMapper objectMapper;
 
-    public JwtSecurityConfig(@Value("${app.cors.allowed-origins}") String origensConfiaveis, ObjectMapper objectMapper) {
-        this.origensConfiaveis = Arrays.stream(origensConfiaveis.split(","))
-                .map(String::trim)
-                .map(origem -> origem.endsWith("/") ? origem.substring(0, origem.length() - 1) : origem)
-                .filter(origem -> !origem.isEmpty())
-                .toList();
+    public JwtSecurityConfig(OrigensConfiaveis origensConfiaveis, ObjectMapper objectMapper) {
+        this.origensConfiaveis = origensConfiaveis;
         this.objectMapper = objectMapper;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity,
-                                                   JwtTokenService jwtTokenService,
-                                                   AuthCookieService authCookieService,
-                                                   PermissaoPerfilService permissaoPerfilService) throws Exception {
+                                                   AutenticacaoJwtService autenticacaoJwtService,
+                                                   AuthCookieService authCookieService) throws Exception {
         return httpSecurity.csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
-                .addFilterBefore(new UserAuthenticationFilter(jwtTokenService, authCookieService, permissaoPerfilService),
+                .addFilterBefore(new UserAuthenticationFilter(autenticacaoJwtService, authCookieService),
                         UsernamePasswordAuthenticationFilter.class)
                 // Cada rota exige uma permissão do cadastro de Perfis/Permissões (ver Permissoes.exigir).
                 // Rotas do visitante que recebem o número da comanda validam também o dono (AcessoService).
                 .authorizeHttpRequests(request -> request
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // O WebSocket tem autorização própria, por mensagem (WebSocketSecurityInterceptor).
                         .requestMatchers("/error", "/covil-ws/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, ArquivoService.URL_PREFIX + "**").permitAll()
@@ -122,7 +116,7 @@ public class JwtSecurityConfig {
             config.addAllowedMethod("*");
             config.addAllowedHeader("*");
             String origem = request.getHeader("Origin");
-            if (origem != null && origensConfiaveis.contains(origem)) {
+            if (origensConfiaveis.contem(origem)) {
                 config.setAllowedOrigins(List.of(origem));
                 config.setAllowCredentials(true);
             } else {

@@ -36,6 +36,7 @@ import java.util.Set;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,7 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest
 @ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
         PedidoController.class, GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
-        AuthCookieService.class, AcessoService.class})
+        AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class})
 @TestPropertySource(properties = {
         "app.jwt.secret=segredo-de-teste-com-mais-de-32-caracteres",
         "app.cors.allowed-origins=http://web.local"
@@ -177,7 +178,13 @@ class JwtSecurityConfigTest {
                 .andExpect(header().string("Set-Cookie", allOf(
                         containsString(AuthCookieService.NOME_COOKIE + "="),
                         containsString("HttpOnly"),
-                        containsString("Path=/api"))))
+                        // Path "/" para o cookie chegar também ao handshake do WebSocket (/covil-ws).
+                        containsString("Path=/;"))))
+                // Remove o cookie das versões anteriores (Path=/api), que teria precedência nas rotas /api.
+                .andExpect(header().stringValues("Set-Cookie", hasItem(allOf(
+                        containsString(AuthCookieService.NOME_COOKIE + "=;"),
+                        containsString("Path=/api"),
+                        containsString("Max-Age=0")))))
                 .andExpect(jsonPath("$.token").doesNotExist());
     }
 

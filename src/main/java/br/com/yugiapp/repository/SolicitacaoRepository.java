@@ -11,7 +11,10 @@ import java.util.Optional;
 @Repository
 public interface SolicitacaoRepository extends JpaRepository<Solicitacao, Long> {
 
-    Optional<Solicitacao> findBySessionId(String id);
+    /** A mais recente: bases antigas podem ter mais de uma solicitação com o mesmo id de sessão. */
+    Optional<Solicitacao> findFirstBySessionIdOrderByIdDesc(String sessionId);
+
+    boolean existsBySessionId(String sessionId);
 
     List<Solicitacao> findAll(Specification<Solicitacao> specification);
 }
