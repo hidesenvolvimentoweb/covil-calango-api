@@ -1,5 +1,6 @@
 package br.com.yugiapp.controller;
 
+import br.com.yugiapp.config.security.AcessoService;
 import br.com.yugiapp.dto.PedidoRequestDTO;
 import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.enums.StatusPedidoEnum;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import static br.com.yugiapp.config.security.Permissoes.*;
+
 @RestController
 @RequestMapping("/api/pedido")
 @RequiredArgsConstructor
@@ -20,9 +23,12 @@ public class PedidoController {
     private final PedidoService pedidoService;
     private final SimpMessagingTemplate messagingTemplate;
     private final WhatsappService whatsappService;
+    private final AcessoService acessoService;
 
     @PostMapping
     public void salvar(@RequestBody PedidoRequestDTO pedido) {
+        // O visitante só faz pedidos na própria comanda.
+        acessoService.validarComanda(pedido.getComanda());
         // TODO: VALIDAR SE A COZINHA ESTÁ ABERTA
         // TODO: CRIAR MÓDULO DE COZINHA COM STATUS ABERTA E FECHADA PARA RECEBER PEDIDOS
         Pedido novoPedido = pedidoService.save(pedido);
@@ -36,6 +42,11 @@ public class PedidoController {
 
     @GetMapping
     public List<Pedido> getAllByFilters(PedidoFilterRequestDTO pedidoFilterRequestDTO) {
+        // O visitante só lista os pedidos da própria comanda; a equipe lista de qualquer uma.
+        if (pedidoFilterRequestDTO.getComanda() == null) {
+            acessoService.comandaDoVisitante().ifPresent(pedidoFilterRequestDTO::setComanda);
+        }
+        acessoService.validarComanda(pedidoFilterRequestDTO.getComanda(), WEB_PEDIDOS, WEB_DASHBOARD, WEB_COMANDAS);
         return pedidoService.getAllByFilters(pedidoFilterRequestDTO);
     }
 

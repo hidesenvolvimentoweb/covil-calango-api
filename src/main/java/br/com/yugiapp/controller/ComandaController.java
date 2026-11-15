@@ -1,5 +1,6 @@
 package br.com.yugiapp.controller;
 
+import br.com.yugiapp.config.security.AcessoService;
 import br.com.yugiapp.dto.ComandaFilterRequestDTO;
 import br.com.yugiapp.dto.ComandaResponseDTO;
 import br.com.yugiapp.enums.StatusComandaEnum;
@@ -13,6 +14,8 @@ import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 
 import java.util.List;
 
+import static br.com.yugiapp.config.security.Permissoes.*;
+
 @RestController
 @RequestMapping("/api/comanda")
 @RequiredArgsConstructor
@@ -22,6 +25,7 @@ public class ComandaController {
 
     private final ComandaService comandaService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AcessoService acessoService;
 
     /**
      * Ao se inscrever no tópico da comanda, o app recebe na hora o estado da comanda caso ela já
@@ -55,12 +59,14 @@ public class ComandaController {
      */
     @PutMapping(path = "/fechar/{numero}")
     public void fecharComanda(@PathVariable String numero) {
+        acessoService.validarComanda(numero, WEB_COMANDAS);
         comandaService.alterarStatus(numero, StatusComandaEnum.FECHADA);
         messagingTemplate.convertAndSend(TOPICO_COMANDAS + numero, comandaService.getResponseDTOByNumero(numero));
     }
 
     @GetMapping(path = "{numero}")
     public ComandaResponseDTO getByNumero(@PathVariable String numero) {
+        acessoService.validarComanda(numero, WEB_COMANDAS, WEB_DASHBOARD);
         return comandaService.getResponseDTOByNumero(numero);
     }
 

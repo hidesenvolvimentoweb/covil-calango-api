@@ -164,8 +164,9 @@ public class UsuarioService {
     }
 
     // TODO: Remover para criar autenticação
-    public UsuarioConvidadoResponseDTO criarUsuarioConvidado(String nome) {
-        return UsuarioConvidadoResponseDTO.builder().nome(nome).token(jwtTokenService.generateToken(nome)).build();
+    public UsuarioConvidadoResponseDTO criarUsuarioConvidado(String nome, String numeroComanda) {
+        return UsuarioConvidadoResponseDTO.builder().nome(nome)
+                .token(jwtTokenService.generateTokenVisitante(nome, numeroComanda)).build();
     }
 
     public Usuario criarNovoUsuario(Solicitacao solicitacao) {

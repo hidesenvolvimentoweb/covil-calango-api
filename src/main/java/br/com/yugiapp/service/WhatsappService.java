@@ -1,5 +1,6 @@
 package br.com.yugiapp.service;
 
+import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -53,14 +54,16 @@ public class WhatsappService {
     }
 
     /**
-     * Avisa o cliente sobre a movimentação do pedido, se ele consentiu em receber notificações pelo WhatsApp.
+     * Avisa pelo WhatsApp que o pedido foi concluído (pronto para retirada), se o cliente consentiu.
+     * As demais movimentações (em andamento, finalizado, cancelado) aparecem apenas no app.
      */
     public void notificarAlteracaoStatusPedido(Pedido pedido) {
         Comanda comanda = pedido.getComanda();
-        if (comanda == null || !comanda.isNotificarWhatsapp() || comanda.getCelular() == null) {
+        if (pedido.getStatus() != StatusPedidoEnum.PRONTO
+                || comanda == null || !comanda.isNotificarWhatsapp() || comanda.getCelular() == null) {
             return;
         }
-        montarMensagemStatusPedido(pedido).ifPresent(mensagem -> enviarMensagem(comanda.getCelular(), mensagem));
+        enviarMensagem(comanda.getCelular(), montarMensagemPedidoPronto(pedido));
     }
 
     /**
@@ -97,16 +100,9 @@ public class WhatsappService {
                 });
     }
 
-    private Optional<String> montarMensagemStatusPedido(Pedido pedido) {
-        String saudacao = "Olá, " + pedido.getComanda().getNomeCliente() + "! ";
-        String descricaoPedido = "Seu pedido de *" + pedido.getQuantidade() + "x " + pedido.getProduto().getNome() + "*";
-        return Optional.ofNullable(switch (pedido.getStatus()) {
-            case EM_ANDAMENTO -> saudacao + "👨‍🍳 " + descricaoPedido + " já está sendo preparado.";
-            case PRONTO -> saudacao + "😋 " + descricaoPedido + " está pronto para retirada no balcão!";
-            case FINALIZADO -> saudacao + "✅ " + descricaoPedido + " foi finalizado. Que tal pedir mais um? 😏";
-            case CANCELADO -> saudacao + "😕 " + descricaoPedido + " foi cancelado. Em caso de dúvidas, fale com a gente no balcão.";
-            case SOLICITADO -> null;
-        });
+    private String montarMensagemPedidoPronto(Pedido pedido) {
+        return "Olá, " + pedido.getComanda().getNomeCliente() + "! 😋 Seu pedido de *" + pedido.getQuantidade()
+                + "x " + pedido.getProduto().getNome() + "* está pronto para retirada no balcão!";
     }
 
 }

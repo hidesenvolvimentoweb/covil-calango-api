@@ -1,5 +1,6 @@
 package br.com.yugiapp.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,18 +27,27 @@ public class Usuario implements Serializable {
     @Column(name = "NOME")
     private String nome;
 
+    /*
+     * A entidade chega ao JSON aninhada em pedidos e comandas (rotas e tópicos públicos). Somente id e nome
+     * são expostos; os dados de cadastro e acesso saem apenas pelos DTOs das telas administrativas.
+     */
+    @JsonIgnore
     @Column(name = "CONTATO")
     private String contato;
 
+    @JsonIgnore
     @Column(unique = true)
     private String email;
 
+    @JsonIgnore
     private String password;
 
     /** Indica que a senha atual é a temporária gerada na finalização do cadastro e ainda precisa ser trocada. */
+    @JsonIgnore
     @Column(name = "SENHA_TEMPORARIA")
     private boolean senhaTemporaria;
 
+    @JsonIgnore
     @ManyToMany(fetch = FetchType.EAGER, cascade = CascadeType.PERSIST)
     @JoinTable(name = "tb_usuario_perfil",
             joinColumns = @JoinColumn(name = "id_usuario"),

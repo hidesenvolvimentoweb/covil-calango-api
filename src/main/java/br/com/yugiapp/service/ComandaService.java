@@ -1,6 +1,5 @@
 package br.com.yugiapp.service;
 
-import br.com.yugiapp.Constantes;
 import br.com.yugiapp.converter.ComandaConverter;
 import br.com.yugiapp.dto.ComandaFilterRequestDTO;
 import br.com.yugiapp.dto.ComandaResponseDTO;
@@ -29,7 +28,12 @@ public class ComandaService {
     private final ComandaConverter comandaConverter;
     private final UsuarioService usuarioService;
     private final PedidoService pedidoService;
-    private final LocalDateTime HOJE = LocalDateTime.now();
+    /** Pedidos que entram no valor da comanda: todos, exceto os cancelados. */
+    private static final List<String> STATUS_COBRADOS = List.of(
+            StatusPedidoEnum.SOLICITADO.name(),
+            StatusPedidoEnum.EM_ANDAMENTO.name(),
+            StatusPedidoEnum.PRONTO.name(),
+            StatusPedidoEnum.FINALIZADO.name());
 
     public List<ComandaResponseDTO> getAllByFilters(ComandaFilterRequestDTO pedidoFilterRequestDTO) {
         return comandaRepository.findAll(comandaSpecifications.getSpecs(pedidoFilterRequestDTO))
@@ -50,7 +54,7 @@ public class ComandaService {
         Comanda comanda = comandaRepository.findByNumero(numero).orElseThrow();
         ComandaResponseDTO comandaResponseDTO = comandaConverter.toResponseDTO(comanda);
         comandaResponseDTO.setPedidos(pedidoService.getAllResponseDTOByFilters(PedidoFilterRequestDTO.builder().comanda(numero).build()));
-        comandaResponseDTO.setValorTotal(obterValorTotalDaComanda(comanda, true));
+        comandaResponseDTO.setValorTotal(obterValorTotalDaComanda(comanda));
         return comandaResponseDTO;
     }
 
@@ -61,7 +65,7 @@ public class ComandaService {
                 .numero(comandaCompleta.getNumero())
                 .dataHoraEntrada(comandaCompleta.getDataHoraEntrada())
                 .nomeCliente(comandaCompleta.getNomeCliente())
-                .usuario(usuarioService.criarUsuarioConvidado(usuario.getNome()))
+                .usuario(usuarioService.criarUsuarioConvidado(usuario.getNome(), comandaCompleta.getNumero()))
                 .build();
     }
 
@@ -73,28 +77,28 @@ public class ComandaService {
                         .nomeCliente(usuario.getNome())
                         .status(StatusComandaEnum.EM_ANALISE.getValue())
                         .build());
-        comandaSemNumero.setNumero(String.valueOf(HOJE.getYear()) + HOJE.getDayOfMonth() + "-" + comandaSemNumero.getId());
+        LocalDateTime agora = LocalDateTime.now();
+        comandaSemNumero.setNumero(String.valueOf(agora.getYear()) + agora.getDayOfMonth() + "-" + comandaSemNumero.getId());
         return comandaRepository.save(comandaSemNumero);
     }
 
     public Comanda alterarStatus(String numero, StatusComandaEnum statusComandaEnum) {
         Comanda comandaAlterada = comandaRepository.findByNumero(numero).orElseThrow();
         if (StatusComandaEnum.FECHADA.getValue().equals(statusComandaEnum.getValue())) {
-            comandaAlterada.setDataHoraSaida(HOJE);
+            comandaAlterada.setDataHoraSaida(LocalDateTime.now());
         }
         if (StatusComandaEnum.ABERTA.getValue().equals(statusComandaEnum.getValue())) {
-            comandaAlterada.setDataHoraEntrada(HOJE);
+            comandaAlterada.setDataHoraEntrada(LocalDateTime.now());
         }
         comandaAlterada.setStatus(statusComandaEnum.getValue());
         return save(comandaAlterada);
     }
 
-    public Double obterValorTotalDaComanda(Comanda comanda, Boolean temPassaporte) {
-        PedidoFilterRequestDTO filtros = PedidoFilterRequestDTO.builder().comanda(comanda.getNumero()).status(
-                List.of(StatusPedidoEnum.SOLICITADO.name(), StatusPedidoEnum.EM_ANDAMENTO.name())).build();
+    public Double obterValorTotalDaComanda(Comanda comanda) {
+        PedidoFilterRequestDTO filtros = PedidoFilterRequestDTO.builder().comanda(comanda.getNumero())
+                .status(STATUS_COBRADOS).build();
         List<Pedido> pedidosDaComanda = pedidoService.getAllByFilters(filtros);
-        Double valorTotal = pedidosDaComanda.stream().map(p -> (p.getProduto().getValor()) * p.getQuantidade()).reduce(0.0, Double::sum);
-        return temPassaporte ? valorTotal + Constantes.VALOR_PASSAPORTE : valorTotal;
+        return pedidosDaComanda.stream().map(p -> (p.getProduto().getValor()) * p.getQuantidade()).reduce(0.0, Double::sum);
     }
 
     public Comanda save(Comanda jogador) {

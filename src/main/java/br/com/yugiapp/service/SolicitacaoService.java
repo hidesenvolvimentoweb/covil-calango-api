@@ -1,5 +1,6 @@
 package br.com.yugiapp.service;
 
+import br.com.yugiapp.config.security.JwtTokenService;
 import br.com.yugiapp.dto.SolicitacaoFilterRequestDTO;
 import br.com.yugiapp.dto.SolicitacaoRequestDTO;
 import br.com.yugiapp.enums.StatusComandaEnum;
@@ -11,7 +12,9 @@ import br.com.yugiapp.repository.SolicitacaoRepository;
 import br.com.yugiapp.specs.SolicitacaoSpecifications;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +28,7 @@ public class SolicitacaoService {
     private final SolicitacaoRepository solicitacaoRepository;
     private final ComandaService comandaService;
     private final UsuarioService usuarioService;
+    private final JwtTokenService jwtTokenService;
 
     private final SolicitacaoSpecifications solicitacaoSpecifications;
 
@@ -81,13 +85,30 @@ public class SolicitacaoService {
 
     @Transactional
     public Solicitacao aceitarSolicitacao(Solicitacao solicitacao) {
+        // Evita gerar uma segunda comanda se a solicitação já foi respondida (ex.: dois atendentes ao mesmo tempo).
+        if (!StatusSolicitacaoEnum.EM_ANALISE.getValue().equals(solicitacao.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta solicitação já foi respondida");
+        }
         Comanda comandaVisitante = comandaService.gerarComanda(Usuario.builder().nome(solicitacao.getNome()).id(1L).build());
         comandaVisitante.setCelular(solicitacao.getCelular());
         comandaVisitante.setNotificarWhatsapp(solicitacao.isNotificarWhatsapp());
         comandaService.save(comandaVisitante);
         Solicitacao solicitacaoAceita = alterarStatus(solicitacao, StatusSolicitacaoEnum.ACEITA);
         solicitacaoAceita.setComanda(comandaService.alterarStatus(comandaVisitante.getNumero(), StatusComandaEnum.ABERTA));
-        return save(solicitacaoAceita);
+        return comToken(save(solicitacaoAceita));
+    }
+
+    /**
+     * Anexa o token do visitante à solicitação aceita cuja comanda ainda está aberta. Usado no aceite e quando
+     * o app se inscreve novamente no tópico (ex.: perdeu a conexão no momento do aceite).
+     */
+    public Solicitacao comToken(Solicitacao solicitacao) {
+        Comanda comanda = solicitacao.getComanda();
+        if (StatusSolicitacaoEnum.ACEITA.getValue().equals(solicitacao.getStatus()) && comanda != null
+                && !StatusComandaEnum.FECHADA.getValue().equals(comanda.getStatus())) {
+            solicitacao.setToken(jwtTokenService.generateTokenVisitante(solicitacao.getNome(), comanda.getNumero()));
+        }
+        return solicitacao;
     }
 
     public Solicitacao recusarSolicitacao(Solicitacao solicitacao) {

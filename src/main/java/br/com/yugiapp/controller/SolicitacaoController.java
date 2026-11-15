@@ -12,6 +12,8 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.socket.messaging.SessionSubscribeEvent;
@@ -47,7 +49,7 @@ public class SolicitacaoController {
             String requestId = destination.substring("/topic/comanda/".length());
             solicitacaoService.findBySessionId(requestId)
                     .filter(solicitacao -> !StatusSolicitacaoEnum.EM_ANALISE.getValue().equals(solicitacao.getStatus()))
-                    .ifPresent(solicitacao -> messagingTemplate.convertAndSend(destination, solicitacao));
+                    .ifPresent(solicitacao -> messagingTemplate.convertAndSend(destination, solicitacaoService.comToken(solicitacao)));
         }
     }
 
@@ -57,16 +59,20 @@ public class SolicitacaoController {
                 solicitacaoService.buildNovaSolicitacao(solicitacaoRequestDTO, (String) message.getHeaders().get("simpSessionId"))));
     }
 
-    @MessageMapping("/solicitacao/aceitar")
-    public void aceitarSolicitacao(Solicitacao solicitacaoRequest) {
-        Solicitacao solicitacao = solicitacaoService.getById(solicitacaoRequest.getId());
-        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.aceitarSolicitacao((solicitacao)));
+    /**
+     * Aceite e recusa são REST (e não mensagens do websocket) para passarem pela autorização por permissão.
+     * O resultado segue para o app pelo tópico /topic/comanda/{sessionId}; no aceite ele leva o token do visitante.
+     */
+    @PostMapping("/{id}/aceitar")
+    public void aceitarSolicitacao(@PathVariable Long id) {
+        Solicitacao solicitacao = solicitacaoService.getById(id);
+        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.aceitarSolicitacao(solicitacao));
     }
 
-    @MessageMapping("/solicitacao/recusar")
-    public void recusarSolicitacao(Solicitacao solicitacaoRequest) {
-        Solicitacao solicitacao = solicitacaoService.getById(solicitacaoRequest.getId());
-        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.recusarSolicitacao((solicitacao)));
+    @PostMapping("/{id}/recusar")
+    public void recusarSolicitacao(@PathVariable Long id) {
+        Solicitacao solicitacao = solicitacaoService.getById(id);
+        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.recusarSolicitacao(solicitacao));
     }
 
 }

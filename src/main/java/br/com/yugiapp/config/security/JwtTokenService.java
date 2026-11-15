@@ -27,15 +27,19 @@ import java.util.Optional;
 public class JwtTokenService {
 
     public static final String CLAIM_PERFIS = "perfis";
+    /** Número da comanda do visitante; presente apenas nos tokens do app. */
+    public static final String CLAIM_COMANDA = "comanda";
     private static final String ISSUER = "covil-calango-api";
     private static final int TAMANHO_MINIMO_SEGREDO = 32;
 
     private final Algorithm algorithm;
     private final JWTVerifier verifier;
     private final Duration validade;
+    private final Duration validadeVisitante;
 
     public JwtTokenService(@Value("${app.jwt.secret:}") String secret,
-                           @Value("${app.jwt.expiration-hours:4}") long expirationHours) {
+                           @Value("${app.jwt.expiration-hours:4}") long expirationHours,
+                           @Value("${app.jwt.visitante-expiration-hours:24}") long visitanteExpirationHours) {
         String segredo = secret == null ? "" : secret.trim();
         if (segredo.isEmpty()) {
             byte[] aleatorio = new byte[48];
@@ -48,27 +52,36 @@ public class JwtTokenService {
         this.algorithm = Algorithm.HMAC256(segredo);
         this.verifier = JWT.require(algorithm).withIssuer(ISSUER).build();
         this.validade = Duration.ofHours(expirationHours);
+        this.validadeVisitante = Duration.ofHours(visitanteExpirationHours);
     }
 
     public Duration getValidade() {
         return validade;
     }
 
-    /** Token de convidado (app), sem perfis. */
-    public String generateToken(String subject) {
-        return generateToken(subject, List.of());
+    /**
+     * Token do visitante do app: perfil {@value Permissoes#PERFIL_VISITANTE} e o número da comanda, que
+     * limita o acesso aos dados dessa comanda.
+     */
+    public String generateTokenVisitante(String nome, String numeroComanda) {
+        return criar(nome, List.of(Permissoes.PERFIL_VISITANTE), numeroComanda, validadeVisitante);
     }
 
-    /** Token de usuário autenticado; os perfis viram as authorities da requisição. */
+    /** Token de usuário do web; os perfis (e as permissões deles) viram as authorities da requisição. */
     public String generateToken(String subject, List<String> perfis) {
+        return criar(subject, perfis, null, validade);
+    }
+
+    private String criar(String subject, List<String> perfis, String numeroComanda, Duration duracao) {
         try {
             Instant agora = Instant.now();
             return JWT.create()
                     .withIssuer(ISSUER)
                     .withIssuedAt(agora)
-                    .withExpiresAt(agora.plus(validade))
+                    .withExpiresAt(agora.plus(duracao))
                     .withSubject(subject)
                     .withClaim(CLAIM_PERFIS, perfis)
+                    .withClaim(CLAIM_COMANDA, numeroComanda)
                     .sign(algorithm);
         } catch (JWTCreationException exception) {
             throw new JWTCreationException("Erro ao gerar token.", exception);

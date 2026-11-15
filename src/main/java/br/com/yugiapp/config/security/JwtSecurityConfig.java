@@ -1,5 +1,6 @@
 package br.com.yugiapp.config.security;
 
+import br.com.yugiapp.service.ArquivoService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -29,11 +30,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static br.com.yugiapp.config.security.Permissoes.*;
+
 @Configuration
 @EnableWebSecurity
 public class JwtSecurityConfig {
-
-    public static final String PERFIL_ADMINISTRADOR = "ROLE_ADMINISTRADOR";
 
     private final List<String> origensConfiaveis;
     private final ObjectMapper objectMapper;
@@ -50,21 +51,54 @@ public class JwtSecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity,
                                                    JwtTokenService jwtTokenService,
-                                                   AuthCookieService authCookieService) throws Exception {
+                                                   AuthCookieService authCookieService,
+                                                   PermissaoPerfilService permissaoPerfilService) throws Exception {
         return httpSecurity.csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
-                .addFilterBefore(new UserAuthenticationFilter(jwtTokenService, authCookieService),
+                .addFilterBefore(new UserAuthenticationFilter(jwtTokenService, authCookieService, permissaoPerfilService),
                         UsernamePasswordAuthenticationFilter.class)
+                // Cada rota exige uma permissão do cadastro de Perfis/Permissões (ver Permissoes.exigir).
+                // Rotas do visitante que recebem o número da comanda validam também o dono (AcessoService).
                 .authorizeHttpRequests(request -> request
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Parâmetros: leitura pública por nome (o app usa); o restante é restrito ao administrador.
-                        .requestMatchers("/api/parametros/admin", "/api/parametros/admin/**").hasAuthority(PERFIL_ADMINISTRADOR)
+                        .requestMatchers("/error", "/covil-ws/**").permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, ArquivoService.URL_PREFIX + "**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/solicitacao-cadastro").permitAll()
+
+                        // Parâmetros: leitura pública por nome (o app usa); o restante é da manutenção.
+                        .requestMatchers("/api/parametros/admin", "/api/parametros/admin/**").hasAnyAuthority(exigir(WEB_MANTER_PRODUTOS))
                         .requestMatchers(HttpMethod.GET, "/api/parametros/*").permitAll()
-                        .requestMatchers("/api/parametros", "/api/parametros/**").hasAuthority(PERFIL_ADMINISTRADOR)
-                        .anyRequest().permitAll())
+                        .requestMatchers("/api/parametros", "/api/parametros/**").hasAnyAuthority(exigir(WEB_MANTER_PRODUTOS))
+
+                        .requestMatchers("/api/produto/admin", "/api/produto/admin/**").hasAnyAuthority(exigir(WEB_MANTER_PRODUTOS))
+                        .requestMatchers(HttpMethod.GET, "/api/produto", "/api/produto/*").hasAnyAuthority(exigir(APP_CARDAPIO, WEB_MANTER_PRODUTOS))
+                        .requestMatchers("/api/produto", "/api/produto/**").hasAnyAuthority(exigir(WEB_MANTER_PRODUTOS))
+
+                        .requestMatchers(HttpMethod.POST, "/api/pedido").hasAnyAuthority(exigir(APP_CARDAPIO))
+                        .requestMatchers(HttpMethod.GET, "/api/pedido").hasAnyAuthority(exigir(
+                                APP_MEUS_PEDIDOS, APP_MINHA_COMANDA, WEB_PEDIDOS, WEB_DASHBOARD, WEB_COMANDAS))
+                        .requestMatchers("/api/pedido/**").hasAnyAuthority(exigir(WEB_PEDIDOS))
+
+                        .requestMatchers(HttpMethod.GET, "/api/comanda").hasAnyAuthority(exigir(WEB_COMANDAS, WEB_DASHBOARD))
+                        .requestMatchers(HttpMethod.GET, "/api/comanda/gerar/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
+                        // Consulta e fechamento: o visitante só a própria comanda (validado no controller).
+                        .requestMatchers(HttpMethod.GET, "/api/comanda/*").hasAnyAuthority(exigir(
+                                PERFIL_VISITANTE, WEB_COMANDAS, WEB_DASHBOARD))
+                        .requestMatchers(HttpMethod.PUT, "/api/comanda/fechar/*").hasAnyAuthority(exigir(APP_MEU_PERFIL, WEB_COMANDAS))
+                        .requestMatchers("/api/comanda/**").hasAnyAuthority(exigir(WEB_COMANDAS))
+
+                        .requestMatchers("/api/solicitacao", "/api/solicitacao/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
+
+                        .requestMatchers("/api/usuario", "/api/usuario/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
+                        .requestMatchers("/api/perfil", "/api/perfil/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
+                        .requestMatchers("/api/permissao", "/api/permissao/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
+                        .requestMatchers("/api/solicitacao-cadastro", "/api/solicitacao-cadastro/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
+
+                        .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, ex) ->
                                 escreverErro(request, response, HttpStatus.UNAUTHORIZED, "Sessão expirada ou não autenticada. Entre novamente"))

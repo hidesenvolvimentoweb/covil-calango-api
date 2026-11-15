@@ -1,5 +1,6 @@
 package br.com.yugiapp.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -45,4 +46,12 @@ public class Solicitacao {
     @ManyToOne
     @JoinColumn(name = "FK_COMANDA")
     private Comanda comanda;
+
+    /**
+     * Token do visitante, enviado apenas ao app que fez a solicitação (tópico /topic/comanda/{sessionId})
+     * quando ela é aceita. Não é gravado no banco.
+     */
+    @Transient
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String token;
 }

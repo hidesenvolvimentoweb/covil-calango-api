@@ -2,48 +2,74 @@ package br.com.yugiapp.config.security;
 
 import br.com.yugiapp.config.exception.GlobalExceptionHandler;
 import br.com.yugiapp.controller.AuthController;
+import br.com.yugiapp.controller.ComandaController;
+import br.com.yugiapp.controller.PedidoController;
+import br.com.yugiapp.dto.ComandaResponseDTO;
+import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.controller.ParametroController;
 import br.com.yugiapp.dto.ParametroResponseDTO;
 import br.com.yugiapp.dto.PerfilResponseDTO;
 import br.com.yugiapp.dto.UsuarioResponseDTO;
 import br.com.yugiapp.service.AuthService;
+import br.com.yugiapp.service.ComandaService;
+import br.com.yugiapp.service.PedidoService;
+import br.com.yugiapp.service.WhatsappService;
 import br.com.yugiapp.service.ParametroService;
 import br.com.yugiapp.service.RecuperacaoSenhaService;
 import jakarta.servlet.http.Cookie;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest
-@ContextConfiguration(classes = {ParametroController.class, AuthController.class, GlobalExceptionHandler.class,
-        JwtSecurityConfig.class, JwtTokenService.class, AuthCookieService.class})
+@ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
+        PedidoController.class, GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
+        AuthCookieService.class, AcessoService.class})
 @TestPropertySource(properties = {
         "app.jwt.secret=segredo-de-teste-com-mais-de-32-caracteres",
         "app.cors.allowed-origins=http://web.local"
 })
 class JwtSecurityConfigTest {
 
-    private static final String ADMIN = JwtSecurityConfig.PERFIL_ADMINISTRADOR;
+    private static final String ADMIN = Permissoes.PERFIL_ADMINISTRADOR;
+    private static final String ATENDENTE = "ROLE_ATENDENTE";
+    private static final String COMANDA = "202615-10";
+
+    /** Permissões de cada perfil, como estariam cadastradas na tela de Perfis. */
+    private static final Map<String, List<String>> PERMISSOES_POR_PERFIL = Map.of(
+            Permissoes.PERFIL_VISITANTE, List.of(Permissoes.APP_CARDAPIO, Permissoes.APP_MEUS_PEDIDOS,
+                    Permissoes.APP_MINHA_COMANDA, Permissoes.APP_MEU_PERFIL),
+            ATENDENTE, List.of(Permissoes.WEB_COMANDAS, Permissoes.WEB_MANTER_PRODUTOS));
 
     @Autowired
     private MockMvc mockMvc;
@@ -56,6 +82,30 @@ class JwtSecurityConfigTest {
     private AuthService authService;
     @MockBean
     private RecuperacaoSenhaService recuperacaoSenhaService;
+    @MockBean
+    private PermissaoPerfilService permissaoPerfilService;
+    @MockBean
+    private ComandaService comandaService;
+    @MockBean
+    private PedidoService pedidoService;
+    @MockBean
+    private WhatsappService whatsappService;
+    @MockBean
+    private SimpMessagingTemplate messagingTemplate;
+
+    @BeforeEach
+    void configurarPermissoes() {
+        when(permissaoPerfilService.autoridades(any())).thenAnswer(invocacao -> {
+            List<String> perfis = invocacao.getArgument(0);
+            Set<String> autoridades = new LinkedHashSet<>(perfis);
+            perfis.forEach(perfil -> autoridades.addAll(PERMISSOES_POR_PERFIL.getOrDefault(perfil, List.of())));
+            return autoridades;
+        });
+    }
+
+    private String bearerVisitante(String numeroComanda) {
+        return "Bearer " + jwtTokenService.generateTokenVisitante("Cliente", numeroComanda);
+    }
 
     private Cookie cookie(List<String> perfis) {
         return new Cookie(AuthCookieService.NOME_COOKIE, jwtTokenService.generateToken("admin@covil", perfis));
@@ -143,5 +193,72 @@ class JwtSecurityConfigTest {
                         .header("Origin", "http://malicioso.local")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
+    }
+
+    @Test
+    void perfilSemSerAdminAcessaPelaPermissao() throws Exception {
+        when(parametroService.atualizarImagem(anyLong(), any())).thenReturn(ParametroResponseDTO.builder().id(1L).build());
+        mockMvc.perform(multipart("/api/parametros/1/imagem").file(imagem())
+                        .cookie(cookie(List.of(ATENDENTE)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void rotasDaEquipeExigemAutenticacao() throws Exception {
+        mockMvc.perform(get("/api/usuario")).andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/usuario").contentType("application/json").content("{}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/comanda")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/pedido")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/produto")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void visitanteNaoAcessaRotasDaEquipe() throws Exception {
+        String visitante = bearerVisitante(COMANDA);
+        mockMvc.perform(get("/api/usuario").header("Authorization", visitante)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/comanda").header("Authorization", visitante)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/parametros/admin").header("Authorization", visitante)).andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/pedido/aceitar/1").header("Authorization", visitante)).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void visitanteAcessaApenasAPropriaComanda() throws Exception {
+        when(comandaService.getResponseDTOByNumero(COMANDA)).thenReturn(ComandaResponseDTO.builder().numero(COMANDA).build());
+        mockMvc.perform(get("/api/comanda/" + COMANDA).header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/comanda/202615-99").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/comanda/fechar/202615-99").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void visitanteListaSomenteOsPedidosDaPropriaComanda() throws Exception {
+        mockMvc.perform(get("/api/pedido").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        ArgumentCaptor<PedidoFilterRequestDTO> filtro = ArgumentCaptor.forClass(PedidoFilterRequestDTO.class);
+        verify(pedidoService).getAllByFilters(filtro.capture());
+        assertThat(filtro.getValue().getComanda()).isEqualTo(COMANDA);
+
+        mockMvc.perform(get("/api/pedido").param("comanda", "202615-99").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void visitanteNaoFazPedidoEmOutraComanda() throws Exception {
+        mockMvc.perform(post("/api/pedido").header("Authorization", bearerVisitante(COMANDA))
+                        .contentType("application/json").content("{\"comanda\":\"202615-99\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void equipeComPermissaoAcessaQualquerComanda() throws Exception {
+        when(comandaService.getResponseDTOByNumero("202615-99")).thenReturn(ComandaResponseDTO.builder().build());
+        mockMvc.perform(get("/api/comanda/202615-99").cookie(cookie(List.of(ATENDENTE))))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/usuario").cookie(cookie(List.of(ATENDENTE))))
+                .andExpect(status().isForbidden());
     }
 }

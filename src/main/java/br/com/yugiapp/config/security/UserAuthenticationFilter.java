@@ -15,11 +15,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Autentica a requisição a partir do JWT, lido do cookie {@value AuthCookieService#NOME_COOKIE} (web) ou do
  * cabeçalho {@code Authorization: Bearer} (app). Token ausente ou inválido não bloqueia a requisição aqui:
  * ela segue anônima e as regras do {@link JwtSecurityConfig} decidem se a rota exige autenticação.
+ * <p>
+ * As authorities da requisição são os perfis do token e as permissões associadas a eles no banco
+ * ({@link PermissaoPerfilService}); o principal é um {@link UsuarioAutenticado}.
  * <p>
  * Proteção contra CSRF: o navegador envia o cookie sozinho, então requisições que alteram dados autenticadas
  * pelo cookie precisam do cabeçalho {@value #CABECALHO_CSRF}. Um site de terceiros só consegue enviar esse
@@ -34,6 +38,7 @@ public class UserAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenService jwtTokenService;
     private final AuthCookieService authCookieService;
+    private final PermissaoPerfilService permissaoPerfilService;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
@@ -52,10 +57,13 @@ public class UserAuthenticationFilter extends OncePerRequestFilter {
 
     private void autenticar(DecodedJWT jwt) {
         List<String> perfis = jwt.getClaim(JwtTokenService.CLAIM_PERFIS).asList(String.class);
-        List<SimpleGrantedAuthority> authorities = perfis == null ? List.of()
-                : perfis.stream().map(SimpleGrantedAuthority::new).toList();
+        Set<SimpleGrantedAuthority> authorities = permissaoPerfilService.autoridades(perfis).stream()
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toSet());
+        UsuarioAutenticado usuario = new UsuarioAutenticado(jwt.getSubject(),
+                jwt.getClaim(JwtTokenService.CLAIM_COMANDA).asString());
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(jwt.getSubject(), null, authorities));
+                new UsernamePasswordAuthenticationToken(usuario, null, authorities));
     }
 
     private String lerCabecalho(HttpServletRequest request) {
