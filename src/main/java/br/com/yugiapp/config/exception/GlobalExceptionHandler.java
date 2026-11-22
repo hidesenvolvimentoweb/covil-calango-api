@@ -28,6 +28,9 @@ import java.util.NoSuchElementException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /** Endpoint do WebSocket/SockJS (WebSocketConfig). */
+    private static final String ROTA_WEBSOCKET = "/covil-ws";
+
     /** Erros de negócio: a mensagem informada em quem lançou a exceção é devolvida ao cliente. */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponseDTO> handleResponseStatus(ResponseStatusException exception, HttpServletRequest request) {
@@ -76,6 +79,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDTO> handleGeneric(Exception exception, HttpServletRequest request) {
+        // Transportes do SockJS (ex.: xhr_streaming) caem quando o cliente fecha ou reconecta. A resposta é um stream
+        // (application/javascript) que não aceita o corpo de erro em JSON: apenas registra e não escreve nada.
+        if (request.getRequestURI() != null && request.getRequestURI().startsWith(ROTA_WEBSOCKET)) {
+            log.debug("Conexão WebSocket/SockJS encerrada em {}: {}", request.getRequestURI(), exception.getMessage());
+            return null;
+        }
         // Exceções do próprio Spring MVC (rota inexistente, método não suportado etc.) já carregam o status correto.
         if (exception instanceof ErrorResponse errorResponse) {
             return build(errorResponse.getStatusCode(), mensagemPadrao(errorResponse.getStatusCode()), request);

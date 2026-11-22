@@ -101,6 +101,15 @@ class MercadoPagoGatewayTest {
         assertThatThrownBy(() -> semToken.consultar("1")).isInstanceOf(GatewayPagamentoException.class);
     }
 
+    @Test
+    void normalizaTokenComEspacosQuebraDeLinhaOuAspas() {
+        assertThat(MercadoPagoGateway.normalizarToken("APP_USR-123\r")).isEqualTo("APP_USR-123");
+        assertThat(MercadoPagoGateway.normalizarToken("  \"APP_USR-123\" ")).isEqualTo("APP_USR-123");
+        assertThat(MercadoPagoGateway.normalizarToken("'APP_USR-123'")).isEqualTo("APP_USR-123");
+        assertThat(MercadoPagoGateway.normalizarToken(" \r\n")).isEmpty();
+        assertThat(MercadoPagoGateway.normalizarToken(null)).isEmpty();
+    }
+
     @ParameterizedTest
     @CsvSource({
             "approved,accredited,PAGO",

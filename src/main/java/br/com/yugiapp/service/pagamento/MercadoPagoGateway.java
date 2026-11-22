@@ -49,7 +49,24 @@ public class MercadoPagoGateway implements GatewayPagamento {
                               @Value("${app.mercadopago.base-url:https://api.mercadopago.com}") String baseUrl,
                               @Value("${app.mercadopago.access-token:}") String accessToken,
                               @Value("${app.api.url:}") String apiUrl) {
-        this(criarRestClient(builder, baseUrl, accessToken), !accessToken.isBlank(), montarUrlNotificacao(apiUrl));
+        this(criarRestClient(builder, baseUrl, normalizarToken(accessToken)), !normalizarToken(accessToken).isEmpty(),
+                montarUrlNotificacao(apiUrl));
+    }
+
+    /**
+     * Remove espaços, quebras de linha (ex.: o "\r" de um .env salvo no Windows) e aspas em volta do token, que
+     * fariam o Mercado Pago recusar a autenticação (401).
+     */
+    static String normalizarToken(String token) {
+        if (token == null) {
+            return "";
+        }
+        String normalizado = token.strip();
+        if (normalizado.length() >= 2 && (normalizado.startsWith("\"") && normalizado.endsWith("\"")
+                || normalizado.startsWith("'") && normalizado.endsWith("'"))) {
+            normalizado = normalizado.substring(1, normalizado.length() - 1).strip();
+        }
+        return normalizado;
     }
 
     MercadoPagoGateway(RestClient restClient, boolean configurado, String urlNotificacao) {
@@ -194,6 +211,10 @@ public class MercadoPagoGateway implements GatewayPagamento {
         } catch (RestClientResponseException exception) {
             log.error("Mercado Pago recusou {} (status {}): {}", operacao, exception.getStatusCode().value(),
                     exception.getResponseBodyAsString());
+            if (exception.getStatusCode().value() == 401) {
+                log.error("Access Token do Mercado Pago recusado: confira MERCADOPAGO_ACCESS_TOKEN (copie o Access Token, "
+                        + "não a Public Key) e recrie o container para recarregar o .env");
+            }
             throw new GatewayPagamentoException("Mercado Pago recusou " + operacao, exception.getStatusCode().value(), exception);
         } catch (RestClientException exception) {
             log.error("Falha de comunicação com o Mercado Pago ao {}", operacao, exception);
