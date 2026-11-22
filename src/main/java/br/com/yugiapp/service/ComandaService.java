@@ -3,6 +3,8 @@ package br.com.yugiapp.service;
 import br.com.yugiapp.converter.ComandaConverter;
 import br.com.yugiapp.dto.ComandaFilterRequestDTO;
 import br.com.yugiapp.dto.ComandaResponseDTO;
+import br.com.yugiapp.dto.PagamentoResponseDTO;
+import br.com.yugiapp.repository.PagamentoRepository;
 import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusPedidoEnum;
@@ -15,9 +17,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor(onConstructor_ = { @Lazy })
@@ -28,6 +36,7 @@ public class ComandaService {
     private final ComandaConverter comandaConverter;
     private final UsuarioService usuarioService;
     private final PedidoService pedidoService;
+    private final PagamentoRepository pagamentoRepository;
     /** Pedidos que entram no valor da comanda: todos, exceto os cancelados. */
     private static final List<String> STATUS_COBRADOS = List.of(
             StatusPedidoEnum.SOLICITADO.name(),
@@ -36,10 +45,24 @@ public class ComandaService {
             StatusPedidoEnum.FINALIZADO.name());
 
     public List<ComandaResponseDTO> getAllByFilters(ComandaFilterRequestDTO pedidoFilterRequestDTO) {
-        return comandaRepository.findAll(comandaSpecifications.getSpecs(pedidoFilterRequestDTO))
+        List<ComandaResponseDTO> comandas = comandaRepository.findAll(comandaSpecifications.getSpecs(pedidoFilterRequestDTO))
                 .stream()
                 .map(comandaConverter::toResponseDTO)
                 .toList();
+        preencherUltimoPagamento(comandas);
+        return comandas;
+    }
+
+    /** Status do pagamento pelo app em cada comanda (ex.: PIX pendente), buscado de uma vez para a lista toda. */
+    private void preencherUltimoPagamento(List<ComandaResponseDTO> comandas) {
+        Set<String> numeros = comandas.stream().map(ComandaResponseDTO::getNumero).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (numeros.isEmpty()) {
+            return;
+        }
+        Map<String, PagamentoResponseDTO> pagamentos = pagamentoRepository.findUltimosByComandaNumeroIn(numeros).stream()
+                .collect(Collectors.toMap(p -> p.getComanda().getNumero(), PagamentoResponseDTO::resumo, (a, b) -> a));
+        comandas.forEach(comanda -> comanda.setUltimoPagamento(pagamentos.get(comanda.getNumero())));
     }
 
     public Comanda getByNumero(String numero) {
@@ -55,6 +78,8 @@ public class ComandaService {
         ComandaResponseDTO comandaResponseDTO = comandaConverter.toResponseDTO(comanda);
         comandaResponseDTO.setPedidos(pedidoService.getAllResponseDTOByFilters(PedidoFilterRequestDTO.builder().comanda(numero).build()));
         comandaResponseDTO.setValorTotal(obterValorTotalDaComanda(comanda));
+        comandaResponseDTO.setUltimoPagamento(pagamentoRepository.findFirstByComandaNumeroOrderByIdDesc(numero)
+                .map(PagamentoResponseDTO::resumo).orElse(null));
         return comandaResponseDTO;
     }
 
@@ -95,10 +120,21 @@ public class ComandaService {
     }
 
     public Double obterValorTotalDaComanda(Comanda comanda) {
+        return calcularValorTotal(comanda).doubleValue();
+    }
+
+    /**
+     * Valor da comanda em reais, com 2 casas decimais. Usa BigDecimal porque a soma em double acumula erros de
+     * arredondamento (ex.: 29.999999), e o provedor de pagamento exige o valor exato.
+     */
+    public BigDecimal calcularValorTotal(Comanda comanda) {
         PedidoFilterRequestDTO filtros = PedidoFilterRequestDTO.builder().comanda(comanda.getNumero())
                 .status(STATUS_COBRADOS).build();
         List<Pedido> pedidosDaComanda = pedidoService.getAllByFilters(filtros);
-        return pedidosDaComanda.stream().map(p -> (p.getProduto().getValor()) * p.getQuantidade()).reduce(0.0, Double::sum);
+        return pedidosDaComanda.stream()
+                .map(p -> BigDecimal.valueOf(p.getProduto().getValor()).multiply(BigDecimal.valueOf(p.getQuantidade())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     public Comanda save(Comanda jogador) {

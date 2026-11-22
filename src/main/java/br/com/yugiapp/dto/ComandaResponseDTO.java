@@ -31,4 +31,7 @@ public class ComandaResponseDTO implements Serializable {
 
     private List<PedidoResponseDTO> pedidos;
 
+    /** Última tentativa de pagamento pelo app (resumo, sem QR Code); nula se o cliente ainda não tentou pagar. */
+    private PagamentoResponseDTO ultimoPagamento;
+
 }

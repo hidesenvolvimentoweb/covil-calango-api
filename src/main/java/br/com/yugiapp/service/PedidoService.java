@@ -5,10 +5,12 @@ import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.dto.PedidoRequestDTO;
 import br.com.yugiapp.dto.PedidoResponseDTO;
 import br.com.yugiapp.enums.StatusComandaEnum;
+import br.com.yugiapp.enums.StatusPagamentoEnum;
 import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.model.Produto;
+import br.com.yugiapp.repository.PagamentoRepository;
 import br.com.yugiapp.repository.PedidoRepository;
 import br.com.yugiapp.repository.ProdutoRepository;
 import br.com.yugiapp.specs.PedidoSpecifications;
@@ -41,6 +43,7 @@ public class PedidoService {
     private final ComandaService comandaService;
     private final PedidoSpecifications pedidoSpecifications;
     private final PedidoConverter pedidoConverter;
+    private final PagamentoRepository pagamentoRepository;
 
     public Page<Pedido> getAll(Pageable pageable) {
         return pedidoRepository.findAll(pageable);
@@ -71,6 +74,11 @@ public class PedidoService {
         Comanda comanda = comandaService.getByNumero(pedidoRequestDTO.getComanda());
         if (StatusComandaEnum.FECHADA.getValue().equals(comanda.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Sua comanda foi finalizada. Gere uma nova comanda para fazer pedidos");
+        }
+        // O valor do PIX já foi fixado: um pedido novo ficaria fora da cobrança.
+        if (pagamentoRepository.existsByComandaNumeroAndStatus(comanda.getNumero(), StatusPagamentoEnum.PENDENTE)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Há um pagamento PIX em andamento para esta comanda. Cancele o PIX para fazer novos pedidos");
         }
         Produto produto = produtoRepository.findById(pedidoRequestDTO.getProduto().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));

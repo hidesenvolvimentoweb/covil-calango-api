@@ -8,6 +8,7 @@ import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.model.Produto;
+import br.com.yugiapp.repository.PagamentoRepository;
 import br.com.yugiapp.repository.PedidoRepository;
 import br.com.yugiapp.repository.ProdutoRepository;
 import br.com.yugiapp.specs.PedidoSpecifications;
@@ -36,12 +37,13 @@ class PedidoServiceTest {
     private final PedidoRepository pedidoRepository = mock(PedidoRepository.class);
     private final ProdutoRepository produtoRepository = mock(ProdutoRepository.class);
     private final ComandaService comandaService = mock(ComandaService.class);
+    private final PagamentoRepository pagamentoRepository = mock(PagamentoRepository.class);
     private PedidoService service;
 
     @BeforeEach
     void configurar() {
         service = new PedidoService(pedidoRepository, produtoRepository, comandaService,
-                mock(PedidoSpecifications.class), mock(PedidoConverter.class));
+                mock(PedidoSpecifications.class), mock(PedidoConverter.class), pagamentoRepository);
         when(comandaService.getByNumero(COMANDA)).thenReturn(Comanda.builder().numero(COMANDA)
                 .status(StatusComandaEnum.ABERTA.getValue()).build());
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(Produto.builder().id(1L).valor(10.0).build()));

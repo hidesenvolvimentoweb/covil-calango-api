@@ -3,7 +3,11 @@ package br.com.yugiapp.config.security;
 import br.com.yugiapp.config.exception.GlobalExceptionHandler;
 import br.com.yugiapp.controller.AuthController;
 import br.com.yugiapp.controller.ComandaController;
+import br.com.yugiapp.controller.PagamentoController;
 import br.com.yugiapp.controller.PedidoController;
+import br.com.yugiapp.dto.PagamentoResponseDTO;
+import br.com.yugiapp.service.PagamentoService;
+import br.com.yugiapp.service.pagamento.MercadoPagoWebhookValidator;
 import br.com.yugiapp.dto.ComandaResponseDTO;
 import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.controller.ParametroController;
@@ -40,6 +44,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -54,7 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest
 @ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
-        PedidoController.class, GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
+        PedidoController.class, PagamentoController.class, GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
         AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class})
 @TestPropertySource(properties = {
         "app.jwt.secret=segredo-de-teste-com-mais-de-32-caracteres",
@@ -93,6 +98,10 @@ class JwtSecurityConfigTest {
     private WhatsappService whatsappService;
     @MockBean
     private SimpMessagingTemplate messagingTemplate;
+    @MockBean
+    private PagamentoService pagamentoService;
+    @MockBean
+    private MercadoPagoWebhookValidator mercadoPagoWebhookValidator;
 
     @BeforeEach
     void configurarPermissoes() {
@@ -242,6 +251,17 @@ class JwtSecurityConfigTest {
     }
 
     @Test
+    void visitanteNaoFechaAComandaSemPagar() throws Exception {
+        mockMvc.perform(put("/api/comanda/fechar/" + COMANDA).header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        verify(comandaService, never()).alterarStatus(any(), any());
+
+        mockMvc.perform(put("/api/comanda/fechar/" + COMANDA).cookie(cookie(List.of(ATENDENTE)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void visitanteListaSomenteOsPedidosDaPropriaComanda() throws Exception {
         mockMvc.perform(get("/api/pedido").header("Authorization", bearerVisitante(COMANDA)))
                 .andExpect(status().isOk());
@@ -267,5 +287,31 @@ class JwtSecurityConfigTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/usuario").cookie(cookie(List.of(ATENDENTE))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void visitantePagaApenasAPropriaComanda() throws Exception {
+        when(pagamentoService.gerarPix(COMANDA)).thenReturn(PagamentoResponseDTO.builder().comanda(COMANDA).build());
+        mockMvc.perform(post("/api/pagamento/comanda/" + COMANDA + "/pix").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/pagamento/comanda/202615-99/pix").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/pagamento/comanda/202615-99").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/pagamento/comanda/" + COMANDA + "/pix")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void webhookDoMercadoPagoEhPublicoEConfereAssinatura() throws Exception {
+        when(mercadoPagoWebhookValidator.validar("ts=1,v1=ab", "req-1", "123")).thenReturn(true);
+        mockMvc.perform(post("/api/pagamento/webhook/mercadopago").param("data.id", "123").param("type", "payment")
+                        .header("x-signature", "ts=1,v1=ab").header("x-request-id", "req-1"))
+                .andExpect(status().isOk());
+        verify(pagamentoService).processarNotificacao("123");
+
+        mockMvc.perform(post("/api/pagamento/webhook/mercadopago").param("data.id", "456").param("type", "payment")
+                        .header("x-signature", "ts=1,v1=00").header("x-request-id", "req-2"))
+                .andExpect(status().isUnauthorized());
+        verify(pagamentoService, never()).processarNotificacao("456");
     }
 }

@@ -124,6 +124,8 @@ class WebSocketSecurityInterceptorTest {
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pedidos", equipe(COZINHA), null))).isTrue();
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/solicitacoes", equipe(COZINHA), null))).isFalse();
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/comandas/" + COMANDA, equipe(ATENDENTE), null))).isTrue();
+        assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pagamentos", equipe(ATENDENTE), null))).isTrue();
+        assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pagamentos", equipe(COZINHA), null))).isFalse();
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pedidos", equipe(Permissoes.PERFIL_ADMINISTRADOR), null))).isTrue();
     }
 
@@ -134,6 +136,9 @@ class WebSocketSecurityInterceptorTest {
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pedidos/comanda/" + COMANDA, null, token))).isTrue();
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/comandas/" + OUTRA_COMANDA, null, token))).isFalse();
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pedidos/comanda/" + OUTRA_COMANDA, null, token))).isFalse();
+        assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pagamentos/" + COMANDA, null, token))).isTrue();
+        assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pagamentos/" + OUTRA_COMANDA, null, token))).isFalse();
+        assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pagamentos", null, token))).isFalse();
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/solicitacoes", null, token))).isFalse();
         assertThat(permitido(frame(StompCommand.SUBSCRIBE, "/topic/pedidos", null, token))).isFalse();
     }

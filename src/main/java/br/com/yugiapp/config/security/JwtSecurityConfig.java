@@ -79,11 +79,19 @@ public class JwtSecurityConfig {
 
                         .requestMatchers(HttpMethod.GET, "/api/comanda").hasAnyAuthority(exigir(WEB_COMANDAS, WEB_DASHBOARD))
                         .requestMatchers(HttpMethod.GET, "/api/comanda/gerar/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
-                        // Consulta e fechamento: o visitante só a própria comanda (validado no controller).
+                        // Consulta: o visitante só a própria comanda (validado no controller).
                         .requestMatchers(HttpMethod.GET, "/api/comanda/*").hasAnyAuthority(exigir(
                                 PERFIL_VISITANTE, WEB_COMANDAS, WEB_DASHBOARD))
-                        .requestMatchers(HttpMethod.PUT, "/api/comanda/fechar/*").hasAnyAuthority(exigir(APP_MEU_PERFIL, WEB_COMANDAS))
+                        // Fechamento (inclusive PUT /fechar) só pela equipe: o cliente fecha a comanda pagando
+                        // (a confirmação do pagamento fecha a comanda, ver PagamentoService).
                         .requestMatchers("/api/comanda/**").hasAnyAuthority(exigir(WEB_COMANDAS))
+
+                        // Pagamento: o webhook do provedor é público (a notificação só dispara uma consulta ao
+                        // provedor); o visitante só paga a própria comanda (validado no controller).
+                        .requestMatchers(HttpMethod.POST, "/api/pagamento/webhook/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/pagamento/comanda/*").hasAnyAuthority(exigir(
+                                APP_MINHA_COMANDA, WEB_COMANDAS, WEB_DASHBOARD))
+                        .requestMatchers("/api/pagamento/comanda/*/pix").hasAnyAuthority(exigir(APP_MINHA_COMANDA, WEB_COMANDAS))
 
                         .requestMatchers("/api/solicitacao", "/api/solicitacao/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
 

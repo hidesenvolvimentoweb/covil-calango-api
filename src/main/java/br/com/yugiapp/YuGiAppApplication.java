@@ -3,12 +3,14 @@ package br.com.yugiapp;
 import jakarta.annotation.PostConstruct;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 
 import java.time.LocalDateTime;
 import java.util.TimeZone;
 
 @SpringBootApplication
+@EnableScheduling
 @EnableWebSocketMessageBroker
 public class YuGiAppApplication {
 

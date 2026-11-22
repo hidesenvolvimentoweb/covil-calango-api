@@ -47,11 +47,13 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
     private static final String PREFIXO_APP = "/app/";
     private static final String TOPICO_PEDIDOS = "/topic/pedidos";
     private static final String TOPICO_SOLICITACOES = "/topic/solicitacoes";
+    private static final String TOPICO_PAGAMENTOS = "/topic/pagamentos";
     /** Resposta da solicitação de comanda; o id é um UUID aleatório gerado pelo app, conhecido só por ele. */
     private static final Pattern TOPICO_RESPOSTA_SOLICITACAO = Pattern.compile(
             "/topic/comanda/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
     private static final Pattern TOPICO_COMANDA = Pattern.compile("/topic/comandas/([0-9A-Za-z-]{1,40})");
     private static final Pattern TOPICO_PEDIDOS_COMANDA = Pattern.compile("/topic/pedidos/comanda/([0-9A-Za-z-]{1,40})");
+    private static final Pattern TOPICO_PAGAMENTOS_COMANDA = Pattern.compile("/topic/pagamentos/([0-9A-Za-z-]{1,40})");
 
     private final AutenticacaoJwtService autenticacaoJwtService;
 
@@ -93,12 +95,16 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
         Matcher comanda;
         if (TOPICO_SOLICITACOES.equals(destino)) {
             permitido = AutenticacaoJwtService.possuiAlguma(autenticacao, exigir(WEB_SOLICITACOES));
+        } else if (TOPICO_PAGAMENTOS.equals(destino)) {
+            permitido = AutenticacaoJwtService.possuiAlguma(autenticacao, exigir(WEB_COMANDAS, WEB_DASHBOARD));
         } else if (TOPICO_PEDIDOS.equals(destino)) {
             permitido = AutenticacaoJwtService.possuiAlguma(autenticacao, exigir(WEB_PEDIDOS, WEB_DASHBOARD));
         } else if ((comanda = TOPICO_COMANDA.matcher(destino)).matches()) {
             permitido = donoOuEquipe(autenticacao, comanda.group(1), WEB_COMANDAS, WEB_DASHBOARD);
         } else if ((comanda = TOPICO_PEDIDOS_COMANDA.matcher(destino)).matches()) {
             permitido = donoOuEquipe(autenticacao, comanda.group(1), WEB_PEDIDOS, WEB_COMANDAS, WEB_DASHBOARD);
+        } else if ((comanda = TOPICO_PAGAMENTOS_COMANDA.matcher(destino)).matches()) {
+            permitido = donoOuEquipe(autenticacao, comanda.group(1), WEB_COMANDAS, WEB_DASHBOARD);
         } else {
             permitido = false;
         }

@@ -9,11 +9,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -29,6 +31,7 @@ public class WhatsappService {
     private static final String ENDPOINT_MENSAGENS = "/api/v1/messages";
     private static final int MIN_DIGITOS_CELULAR = 10;
     private static final int MAX_DIGITOS_CELULAR = 13;
+    private static final Locale LOCALE_BR = Locale.forLanguageTag("pt-BR");
 
     private final String botUrl;
     private final String botToken;
@@ -64,6 +67,15 @@ public class WhatsappService {
             return;
         }
         enviarMensagem(comanda.getCelular(), montarMensagemPedidoPronto(pedido));
+    }
+
+    /** Confirma pelo WhatsApp o pagamento da comanda, se o cliente consentiu. */
+    public void notificarPagamentoAprovado(Comanda comanda, BigDecimal valor) {
+        if (comanda == null || !comanda.isNotificarWhatsapp() || comanda.getCelular() == null) {
+            return;
+        }
+        enviarMensagem(comanda.getCelular(), "Olá, " + comanda.getNomeCliente() + "! ✅ Recebemos o pagamento de *R$ "
+                + String.format(LOCALE_BR, "%,.2f", valor) + "* da sua comanda. Obrigado e volte sempre ao Covil do Calango!");
     }
 
     /**

@@ -24,4 +24,5 @@
     <include file="db/changelog/changes/018-add-whatsapp-tb-comanda-tb-solicitacao.xml"/>
     <include file="db/changelog/changes/019-update-categoria-tb-produto.xml"/>
     <include file="db/changelog/changes/020-remove-senha-tb-usuario-visitante.xml"/>
+    <include file="db/changelog/changes/021-create-tb-pagamento.xml"/>
 </databaseChangeLog>

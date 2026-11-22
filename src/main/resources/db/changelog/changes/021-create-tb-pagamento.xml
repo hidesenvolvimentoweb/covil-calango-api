@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <changeSet id="041-create-tb-pagamento" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="tb_pagamento"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="public" tableName="tb_pagamento">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_pagamento" nullable="false"/>
+            </column>
+            <column name="fk_comanda" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="metodo" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="valor" type="NUMERIC(10,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="gateway" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="gateway_id" type="VARCHAR(100)"/>
+            <column name="status_gateway" type="VARCHAR(50)"/>
+            <column name="idempotency_key" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pix_copia_e_cola" type="TEXT"/>
+            <column name="pix_qr_code_base64" type="TEXT"/>
+            <column name="dt_hora_criacao" type="TIMESTAMP WITHOUT TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="dt_hora_expiracao" type="TIMESTAMP WITHOUT TIME ZONE"/>
+            <column name="dt_hora_pagamento" type="TIMESTAMP WITHOUT TIME ZONE"/>
+            <column name="dt_hora_atualizacao" type="TIMESTAMP WITHOUT TIME ZONE"/>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableSchemaName="public"
+                baseTableName="tb_pagamento"
+                baseColumnNames="fk_comanda"
+                constraintName="fk_tb_pagamento_comanda"
+                referencedTableSchemaName="public"
+                referencedTableName="tb_comanda"
+                referencedColumnNames="id"/>
+        <createIndex schemaName="public" tableName="tb_pagamento" indexName="idx_tb_pagamento_comanda">
+            <column name="fk_comanda"/>
+        </createIndex>
+        <createIndex schemaName="public" tableName="tb_pagamento" indexName="uk_tb_pagamento_gateway_id" unique="true">
+            <column name="gateway"/>
+            <column name="gateway_id"/>
+        </createIndex>
+        <createSequence schemaName="public" sequenceName="tb_pagamento_seq" startValue="1" incrementBy="1"/>
+    </changeSet>
+    <changeSet id="042-create-uk-tb-pagamento-pendente-por-comanda" author="covil-calango">
+        <comment>Garante no banco no máximo um pagamento pendente por comanda.</comment>
+        <sql>
+            CREATE UNIQUE INDEX IF NOT EXISTS uk_tb_pagamento_pendente_comanda
+            ON public.tb_pagamento (fk_comanda)
+            WHERE status = 'PENDENTE'
+        </sql>
+    </changeSet>
+</databaseChangeLog>
