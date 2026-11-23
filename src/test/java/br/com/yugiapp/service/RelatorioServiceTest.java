@@ -13,6 +13,7 @@ import br.com.yugiapp.repository.ComandaRepository;
 import br.com.yugiapp.repository.PedidoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -149,6 +150,19 @@ class RelatorioServiceTest {
         assertThat(relatorio.ticketMedio()).isEqualByComparingTo("0");
         assertThat(relatorio.permanenciaMediaMinutos()).isNull();
         assertThat(relatorio.produtos()).isEmpty();
+    }
+
+    /** O Spring cria o serviço como na subida da API (dois construtores: precisa saber qual usar). */
+    @Test
+    void springConsegueCriarOServico() {
+        new ApplicationContextRunner()
+                .withBean(ComandaRepository.class, () -> comandaRepository)
+                .withBean(PedidoRepository.class, () -> pedidoRepository)
+                .withUserConfiguration(RelatorioService.class)
+                .run(contexto -> {
+                    assertThat(contexto).hasNotFailed();
+                    assertThat(contexto).hasSingleBean(RelatorioService.class);
+                });
     }
 
     @Test

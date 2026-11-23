@@ -15,6 +15,7 @@ import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.model.Produto;
 import br.com.yugiapp.repository.ComandaRepository;
 import br.com.yugiapp.repository.PedidoRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,6 +59,8 @@ public class RelatorioService {
     private final ZoneId fusoDados;
     private final Clock clock;
 
+    /** Construtor usado pelo Spring (com dois construtores, ele precisa da indicação explícita). */
+    @Autowired
     public RelatorioService(ComandaRepository comandaRepository, PedidoRepository pedidoRepository,
                             @Value("${app.fuso-horario:America/Sao_Paulo}") String fusoHorario) {
         this(comandaRepository, pedidoRepository, ZoneId.of(fusoHorario), ZoneId.systemDefault(), Clock.systemUTC());
