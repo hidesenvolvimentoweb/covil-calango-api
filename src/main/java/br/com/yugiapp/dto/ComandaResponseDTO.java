@@ -1,5 +1,6 @@
 package br.com.yugiapp.dto;
 
+import br.com.yugiapp.enums.FormaPagamentoEnum;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +29,9 @@ public class ComandaResponseDTO implements Serializable {
     private Double valorTotal;
 
     private String status;
+
+    /** Forma de pagamento da comanda fechada; nula enquanto aberta. */
+    private FormaPagamentoEnum formaPagamento;
 
     private List<PedidoResponseDTO> pedidos;
 

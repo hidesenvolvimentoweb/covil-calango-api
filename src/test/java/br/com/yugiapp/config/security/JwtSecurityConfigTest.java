@@ -83,6 +83,8 @@ class JwtSecurityConfigTest {
     private JwtTokenService jwtTokenService;
 
     @MockBean
+    private br.com.yugiapp.service.ComandaNotificacaoService comandaNotificacaoService;
+    @MockBean
     private ParametroService parametroService;
     @MockBean
     private AuthService authService;
@@ -254,11 +256,25 @@ class JwtSecurityConfigTest {
     void visitanteNaoFechaAComandaSemPagar() throws Exception {
         mockMvc.perform(put("/api/comanda/fechar/" + COMANDA).header("Authorization", bearerVisitante(COMANDA)))
                 .andExpect(status().isForbidden());
-        verify(comandaService, never()).alterarStatus(any(), any());
+        verify(comandaService, never()).fechar(any(), any());
 
         mockMvc.perform(put("/api/comanda/fechar/" + COMANDA).cookie(cookie(List.of(ATENDENTE)))
-                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest")
+                        .contentType("application/json").content("{\"formaPagamento\":\"DINHEIRO\"}"))
                 .andExpect(status().isOk());
+        verify(comandaService).fechar(COMANDA, br.com.yugiapp.enums.FormaPagamentoEnum.DINHEIRO);
+    }
+
+    @Test
+    void equipeInformaAFormaDePagamentoAoFecharAComanda() throws Exception {
+        mockMvc.perform(put("/api/comanda/fechar/" + COMANDA).cookie(cookie(List.of(ATENDENTE)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(put("/api/comanda/fechar/" + COMANDA).cookie(cookie(List.of(ATENDENTE)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest")
+                        .contentType("application/json").content("{\"formaPagamento\":\"CHEQUE\"}"))
+                .andExpect(status().isBadRequest());
+        verify(comandaService, never()).fechar(any(), any());
     }
 
     @Test

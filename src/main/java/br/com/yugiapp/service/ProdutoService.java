@@ -122,7 +122,11 @@ public class ProdutoService {
         produto.setValor(updated.getValor());
         produto.setIngredientes(updated.getIngredientes());
         produto.setPrazo(updated.getPrazo());
-        return toResponse(produtoRepository.save(produto));
+        produtoRepository.saveAndFlush(produto);
+        if (Boolean.TRUE.equals(request.getAlterarEstoque())) {
+            produtoRepository.definirEstoque(id, updated.getEstoque());
+        }
+        return toResponse(getById(id));
     }
 
     private Produto fromRequest(ProdutoRequestDTO request) {
@@ -136,6 +140,10 @@ public class ProdutoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Prazo do produto deve ser maior ou igual a zero");
         }
+        if (request.getEstoque() != null && request.getEstoque() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Estoque do produto deve ser maior ou igual a zero");
+        }
         return Produto.builder()
                 .nome(request.getNome().trim())
                 .categoria(request.getCategoria() != null ? request.getCategoria() : CategoriaProdutoEnum.OUTROS)
@@ -143,6 +151,7 @@ public class ProdutoService {
                 .valor(request.getValor())
                 .ingredientes(trimToNull(request.getIngredientes()))
                 .prazo(request.getPrazo())
+                .estoque(request.getEstoque())
                 .build();
     }
 
@@ -159,6 +168,7 @@ public class ProdutoService {
                 .valor(produto.getValor())
                 .ingredientes(produto.getIngredientes())
                 .prazo(produto.getPrazo())
+                .estoque(produto.getEstoque())
                 .build();
     }
 }

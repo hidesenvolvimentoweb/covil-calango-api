@@ -25,8 +25,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -108,7 +110,7 @@ class PedidoServiceTest {
             "EM_ANDAMENTO, PRONTO", "EM_ANDAMENTO, CANCELADO",
             "PRONTO, FINALIZADO"})
     void permiteAsTransicoesDoFluxoDaCozinha(StatusPedidoEnum atual, StatusPedidoEnum novo) {
-        when(pedidoRepository.findById(1L)).thenReturn(Optional.of(Pedido.builder().id(1L).status(atual).build()));
+        when(pedidoRepository.findByIdParaAtualizacao(1L)).thenReturn(Optional.of(Pedido.builder().id(1L).status(atual).build()));
         assertThat(service.alterarStatus(1L, novo).getStatus()).isEqualTo(novo);
     }
 
@@ -117,10 +119,95 @@ class PedidoServiceTest {
             "CANCELADO, EM_ANDAMENTO", "FINALIZADO, CANCELADO", "PRONTO, CANCELADO",
             "SOLICITADO, PRONTO", "SOLICITADO, FINALIZADO", "EM_ANDAMENTO, EM_ANDAMENTO"})
     void recusaTransicoesForaDoFluxo(StatusPedidoEnum atual, StatusPedidoEnum novo) {
-        when(pedidoRepository.findById(1L)).thenReturn(Optional.of(Pedido.builder().id(1L).status(atual).build()));
+        when(pedidoRepository.findByIdParaAtualizacao(1L)).thenReturn(Optional.of(Pedido.builder().id(1L).status(atual).build()));
         assertThatThrownBy(() -> service.alterarStatus(1L, novo))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         erro -> assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
         verify(pedidoRepository, never()).save(any());
+    }
+
+    private void produtoComEstoque(Integer estoque) {
+        when(produtoRepository.findById(1L)).thenReturn(Optional.of(Produto.builder().id(1L).nome("Água")
+                .valor(5.0).estoque(estoque).build()));
+    }
+
+    @Test
+    void produtoSemControleDeEstoqueNaoDaBaixa() {
+        service.save(pedido(3L));
+        verify(produtoRepository, never()).baixarEstoque(any(), anyInt());
+    }
+
+    @Test
+    void daBaixaNoEstoqueAoRegistrarOPedido() {
+        produtoComEstoque(10);
+        when(produtoRepository.baixarEstoque(1L, 5)).thenReturn(1);
+
+        service.save(pedido(5L));
+
+        verify(produtoRepository).baixarEstoque(1L, 5);
+        verify(pedidoRepository).save(any());
+    }
+
+    @Test
+    void recusaPedidoSemUnidadesSuficientesSemInformarOEstoque() {
+        produtoComEstoque(3);
+        when(produtoRepository.baixarEstoque(1L, 5)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.save(pedido(5L)))
+                .isInstanceOfSatisfying(ResponseStatusException.class, erro -> {
+                    assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(erro.getReason()).contains("Água").doesNotContain("3");
+                });
+        verify(pedidoRepository, never()).save(any());
+    }
+
+    @Test
+    void recusaProdutoEsgotado() {
+        produtoComEstoque(0);
+
+        assertThatThrownBy(() -> service.save(pedido(1L)))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        erro -> assertThat(erro.getReason()).isEqualTo("Água esgotou. Escolha outro produto"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SOLICITADO", "EM_ANDAMENTO"})
+    void cancelamentoDevolveAsUnidadesAoEstoque(StatusPedidoEnum atual) {
+        when(pedidoRepository.findByIdParaAtualizacao(1L)).thenReturn(Optional.of(Pedido.builder().id(1L).status(atual)
+                .produto(Produto.builder().id(1L).build()).quantidade(4L).build()));
+
+        service.alterarStatus(1L, StatusPedidoEnum.CANCELADO);
+
+        verify(produtoRepository).devolverEstoque(1L, 4);
+    }
+
+    @Test
+    void demaisTransicoesNaoMexemNoEstoque() {
+        when(pedidoRepository.findByIdParaAtualizacao(1L)).thenReturn(Optional.of(Pedido.builder().id(1L)
+                .status(StatusPedidoEnum.SOLICITADO).produto(Produto.builder().id(1L).build()).quantidade(4L).build()));
+
+        service.alterarStatus(1L, StatusPedidoEnum.EM_ANDAMENTO);
+
+        verify(produtoRepository, never()).devolverEstoque(any(), anyInt());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"SOLICITADO, true", "EM_ANDAMENTO, true", "PRONTO, false", "FINALIZADO, false", "CANCELADO, false"})
+    void exclusaoSoDevolveOEstoqueDePedidosNaoEntregues(StatusPedidoEnum status, boolean devolve) {
+        when(pedidoRepository.findByIdParaAtualizacao(1L)).thenReturn(Optional.of(Pedido.builder().id(1L).status(status)
+                .produto(Produto.builder().id(1L).build()).quantidade(2L).build()));
+
+        service.delete(1L);
+
+        verify(produtoRepository, devolve ? times(1) : never()).devolverEstoque(1L, 2);
+    }
+
+    @Test
+    void limiteDoPedidoNoCardapioRespeitaOEstoqueSemExpoLo() {
+        assertThat(Produto.builder().build().getQuantidadeMaximaPedido()).isEqualTo(PedidoService.QUANTIDADE_MAXIMA);
+        assertThat(Produto.builder().estoque(100).build().getQuantidadeMaximaPedido())
+                .isEqualTo(PedidoService.QUANTIDADE_MAXIMA);
+        assertThat(Produto.builder().estoque(7).build().getQuantidadeMaximaPedido()).isEqualTo(7);
+        assertThat(Produto.builder().estoque(0).build().getQuantidadeMaximaPedido()).isZero();
     }
 }

@@ -2,6 +2,7 @@ package br.com.yugiapp.service;
 
 import br.com.yugiapp.dto.PagamentoResponseDTO;
 import br.com.yugiapp.enums.MetodoPagamentoEnum;
+import br.com.yugiapp.enums.FormaPagamentoEnum;
 import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusPagamentoEnum;
 import br.com.yugiapp.model.Comanda;
@@ -320,7 +321,7 @@ public class PagamentoService {
         if (StatusComandaEnum.FECHADA.getValue().equals(comanda.getStatus())) {
             return false;
         }
-        comandaService.alterarStatus(comanda.getNumero(), StatusComandaEnum.FECHADA);
+        comandaService.fechar(comanda.getNumero(), FormaPagamentoEnum.PIX);
         return true;
     }
 

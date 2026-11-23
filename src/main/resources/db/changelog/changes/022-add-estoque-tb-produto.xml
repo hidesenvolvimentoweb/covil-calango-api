@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!--
+        Unidades disponíveis para venda. Nulo: produto sem controle de estoque (comportamento anterior).
+        A restrição garante que a baixa concorrente nunca deixe o estoque negativo.
+    -->
+    <changeSet id="043-add-estoque-tb-produto" author="covil-calango">
+        <addColumn schemaName="public" tableName="tb_produto">
+            <column name="estoque" type="INTEGER"/>
+        </addColumn>
+        <sql>ALTER TABLE public.tb_produto ADD CONSTRAINT ck_tb_produto_estoque CHECK (estoque IS NULL OR estoque &gt;= 0)</sql>
+        <rollback>
+            <sql>ALTER TABLE public.tb_produto DROP CONSTRAINT ck_tb_produto_estoque</sql>
+            <dropColumn schemaName="public" tableName="tb_produto" columnName="estoque"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

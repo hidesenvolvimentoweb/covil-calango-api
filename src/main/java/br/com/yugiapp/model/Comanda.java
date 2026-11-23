@@ -1,5 +1,6 @@
 package br.com.yugiapp.model;
 
+import br.com.yugiapp.enums.FormaPagamentoEnum;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -42,6 +43,11 @@ public class Comanda implements Serializable {
 
     @Column(name = "STATUS")
     private String status;
+
+    /** Como a comanda foi paga; preenchida no fechamento (nula enquanto aberta). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "FORMA_PAGAMENTO")
+    private FormaPagamentoEnum formaPagamento;
 
     /*
      * A entidade chega ao JSON aninhada nos pedidos (tópicos do WebSocket e rotas do app). O celular é dado pessoal

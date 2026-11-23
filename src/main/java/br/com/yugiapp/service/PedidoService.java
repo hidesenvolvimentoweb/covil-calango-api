@@ -19,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -30,13 +31,16 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class PedidoService {
 
-    static final long QUANTIDADE_MAXIMA = 20;
+    static final long QUANTIDADE_MAXIMA = Produto.QUANTIDADE_MAXIMA_POR_PEDIDO;
     /** Tamanho da coluna OBSERVACAO (VARCHAR(255)). */
     static final int TAMANHO_MAXIMO_OBSERVACAO = 255;
     private static final Map<StatusPedidoEnum, Set<StatusPedidoEnum>> TRANSICOES_PERMITIDAS = Map.of(
             StatusPedidoEnum.SOLICITADO, Set.of(StatusPedidoEnum.EM_ANDAMENTO, StatusPedidoEnum.CANCELADO),
             StatusPedidoEnum.EM_ANDAMENTO, Set.of(StatusPedidoEnum.PRONTO, StatusPedidoEnum.CANCELADO),
             StatusPedidoEnum.PRONTO, Set.of(StatusPedidoEnum.FINALIZADO));
+    /** Pedidos que ainda não saíram da cozinha: ao cancelar ou excluir, as unidades voltam ao estoque. */
+    private static final Set<StatusPedidoEnum> STATUS_QUE_DEVOLVEM_ESTOQUE =
+            Set.of(StatusPedidoEnum.SOLICITADO, StatusPedidoEnum.EM_ANDAMENTO);
 
     private final PedidoRepository pedidoRepository;
     private final ProdutoRepository produtoRepository;
@@ -65,10 +69,22 @@ public class PedidoService {
         return pedidoRepository.findById(id).orElseThrow();
     }
 
-    public void delete(Long id) {
-        pedidoRepository.deleteById(id);
+    /** Exclui o pedido e o devolve (já removido), para quem chamou saber de qual comanda ele era. */
+    @Transactional
+    public Pedido delete(Long id) {
+        Pedido pedido = pedidoRepository.findByIdParaAtualizacao(id).orElseThrow();
+        boolean devolverEstoque = STATUS_QUE_DEVOLVEM_ESTOQUE.contains(pedido.getStatus());
+        pedidoRepository.delete(pedido);
+        if (devolverEstoque) {
+            devolverEstoque(pedido);
+        }
+        return pedido;
     }
 
+    /**
+     * Registra o pedido e dá baixa no estoque do produto na mesma transação: se a gravação falhar, a baixa é desfeita.
+     */
+    @Transactional
     public Pedido save(PedidoRequestDTO pedidoRequestDTO) {
         validar(pedidoRequestDTO);
         Comanda comanda = comandaService.getByNumero(pedidoRequestDTO.getComanda());
@@ -82,6 +98,7 @@ public class PedidoService {
         }
         Produto produto = produtoRepository.findById(pedidoRequestDTO.getProduto().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+        baixarEstoque(produto, pedidoRequestDTO.getQuantidade());
         String observacao = pedidoRequestDTO.getObservacao() == null || pedidoRequestDTO.getObservacao().isBlank()
                 ? null
                 : pedidoRequestDTO.getObservacao().trim();
@@ -99,14 +116,40 @@ public class PedidoService {
      * Altera o status seguindo o fluxo da cozinha: Solicitado → Em Andamento → Pronto → Finalizado, com
      * cancelamento antes de ficar pronto. Pedidos finalizados ou cancelados não mudam mais.
      */
+    @Transactional
     public Pedido alterarStatus(Long id, StatusPedidoEnum status) {
-        Pedido pedido = getById(id);
+        Pedido pedido = pedidoRepository.findByIdParaAtualizacao(id).orElseThrow();
         if (!TRANSICOES_PERMITIDAS.getOrDefault(pedido.getStatus(), Set.of()).contains(status)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Não é possível alterar um pedido "
                     + descricao(pedido.getStatus()) + " para " + status.getValue());
         }
         pedido.setStatus(status);
-        return pedidoRepository.save(pedido);
+        Pedido atualizado = pedidoRepository.save(pedido);
+        if (status == StatusPedidoEnum.CANCELADO) {
+            devolverEstoque(atualizado);
+        }
+        return atualizado;
+    }
+
+    /**
+     * Baixa atômica (ver ProdutoRepository.baixarEstoque). A mensagem não informa quantas unidades restam: o cliente
+     * só percebe o limite que o app aplica à quantidade.
+     */
+    private void baixarEstoque(Produto produto, long quantidade) {
+        if (produto.getEstoque() == null) {
+            return;
+        }
+        if (produtoRepository.baixarEstoque(produto.getId(), Math.toIntExact(quantidade)) == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, produto.getEstoque() == 0
+                    ? produto.getNome() + " esgotou. Escolha outro produto"
+                    : "Não há unidades suficientes de " + produto.getNome() + " no momento. Diminua a quantidade do pedido");
+        }
+    }
+
+    private void devolverEstoque(Pedido pedido) {
+        if (pedido.getProduto() != null && pedido.getQuantidade() != null) {
+            produtoRepository.devolverEstoque(pedido.getProduto().getId(), Math.toIntExact(pedido.getQuantidade()));
+        }
     }
 
     private static void validar(PedidoRequestDTO pedido) {

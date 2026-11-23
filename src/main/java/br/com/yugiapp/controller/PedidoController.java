@@ -5,6 +5,7 @@ import br.com.yugiapp.dto.PedidoRequestDTO;
 import br.com.yugiapp.dto.PedidoFilterRequestDTO;
 import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Pedido;
+import br.com.yugiapp.service.ComandaNotificacaoService;
 import br.com.yugiapp.service.PedidoService;
 import br.com.yugiapp.service.WhatsappService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class PedidoController {
     private final SimpMessagingTemplate messagingTemplate;
     private final WhatsappService whatsappService;
     private final AcessoService acessoService;
+    private final ComandaNotificacaoService comandaNotificacaoService;
 
     @PostMapping
     public void salvar(@RequestBody PedidoRequestDTO pedido) {
@@ -33,11 +35,12 @@ public class PedidoController {
         // TODO: CRIAR MÓDULO DE COZINHA COM STATUS ABERTA E FECHADA PARA RECEBER PEDIDOS
         Pedido novoPedido = pedidoService.save(pedido);
         messagingTemplate.convertAndSend("/topic/pedidos", novoPedido);
+        comandaNotificacaoService.notificarAlteracao(numeroDaComanda(novoPedido));
     }
 
     @DeleteMapping(path = "{id}")
     public void delete(@PathVariable Long id) {
-        pedidoService.delete(id);
+        comandaNotificacaoService.notificarAlteracao(numeroDaComanda(pedidoService.delete(id)));
     }
 
     @GetMapping
@@ -80,13 +83,19 @@ public class PedidoController {
     /**
      * Notifica o cliente dono da comanda sobre a alteração de status do pedido:
      * em tempo real no app (tópico /topic/pedidos/comanda/{numeroComanda}) e,
-     * se ele consentiu, pelo WhatsApp.
+     * se ele consentiu, pelo WhatsApp. A tela de comandas também é avisada (o cancelamento muda o valor).
      */
     private void notificarAlteracaoStatus(Pedido pedido) {
-        if (pedido.getComanda() == null || pedido.getComanda().getNumero() == null) {
+        String numero = numeroDaComanda(pedido);
+        if (numero == null) {
             return;
         }
-        messagingTemplate.convertAndSend("/topic/pedidos/comanda/" + pedido.getComanda().getNumero(), pedido);
+        messagingTemplate.convertAndSend("/topic/pedidos/comanda/" + numero, pedido);
         whatsappService.notificarAlteracaoStatusPedido(pedido);
+        comandaNotificacaoService.notificarAlteracao(numero);
+    }
+
+    private static String numeroDaComanda(Pedido pedido) {
+        return pedido == null || pedido.getComanda() == null ? null : pedido.getComanda().getNumero();
     }
 }

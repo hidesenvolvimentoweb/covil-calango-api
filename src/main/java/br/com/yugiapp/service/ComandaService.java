@@ -6,6 +6,7 @@ import br.com.yugiapp.dto.ComandaResponseDTO;
 import br.com.yugiapp.dto.PagamentoResponseDTO;
 import br.com.yugiapp.repository.PagamentoRepository;
 import br.com.yugiapp.dto.PedidoFilterRequestDTO;
+import br.com.yugiapp.enums.FormaPagamentoEnum;
 import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Comanda;
@@ -15,7 +16,10 @@ import br.com.yugiapp.repository.ComandaRepository;
 import br.com.yugiapp.specs.ComandaSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -117,6 +121,25 @@ public class ComandaService {
         }
         comandaAlterada.setStatus(statusComandaEnum.getValue());
         return save(comandaAlterada);
+    }
+
+    /**
+     * Fecha a comanda registrando como ela foi paga. A comanda fica bloqueada até o fim da transação: se o PIX do app
+     * for aprovado ao mesmo tempo que o fechamento no balcão, só um dos dois fecha (o outro recebe 409).
+     */
+    @Transactional
+    public Comanda fechar(String numero, FormaPagamentoEnum formaPagamento) {
+        if (formaPagamento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a forma de pagamento da comanda");
+        }
+        Comanda comanda = comandaRepository.findByNumeroParaAtualizacao(numero).orElseThrow();
+        if (StatusComandaEnum.FECHADA.getValue().equals(comanda.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A comanda " + numero + " já está fechada");
+        }
+        comanda.setFormaPagamento(formaPagamento);
+        comanda.setDataHoraSaida(LocalDateTime.now());
+        comanda.setStatus(StatusComandaEnum.FECHADA.getValue());
+        return save(comanda);
     }
 
     public Double obterValorTotalDaComanda(Comanda comanda) {

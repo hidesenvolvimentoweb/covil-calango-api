@@ -25,4 +25,6 @@
     <include file="db/changelog/changes/019-update-categoria-tb-produto.xml"/>
     <include file="db/changelog/changes/020-remove-senha-tb-usuario-visitante.xml"/>
     <include file="db/changelog/changes/021-create-tb-pagamento.xml"/>
+    <include file="db/changelog/changes/022-add-estoque-tb-produto.xml"/>
+    <include file="db/changelog/changes/023-add-forma-pagamento-tb-comanda.xml"/>
 </databaseChangeLog>

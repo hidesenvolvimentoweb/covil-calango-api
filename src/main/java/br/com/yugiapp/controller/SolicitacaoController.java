@@ -5,6 +5,7 @@ import br.com.yugiapp.dto.SolicitacaoFilterRequestDTO;
 import br.com.yugiapp.dto.SolicitacaoRequestDTO;
 import br.com.yugiapp.enums.StatusSolicitacaoEnum;
 import br.com.yugiapp.model.Solicitacao;
+import br.com.yugiapp.service.ComandaNotificacaoService;
 import br.com.yugiapp.service.SolicitacaoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,8 @@ public class SolicitacaoController {
     private final SolicitacaoService solicitacaoService;
 
     private final SimpMessagingTemplate messagingTemplate;
+
+    private final ComandaNotificacaoService comandaNotificacaoService;
 
     @GetMapping
     public List<Solicitacao> getAll(SolicitacaoFilterRequestDTO solicitacaoFilterRequestDTO) {
@@ -92,7 +95,12 @@ public class SolicitacaoController {
     @PostMapping("/{id}/aceitar")
     public void aceitarSolicitacao(@PathVariable Long id) {
         Solicitacao solicitacao = solicitacaoService.getById(id);
-        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.aceitarSolicitacao(solicitacao));
+        Solicitacao aceita = solicitacaoService.aceitarSolicitacao(solicitacao);
+        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), aceita);
+        // A comanda aberta no aceite aparece na hora na tela de comandas.
+        if (aceita.getComanda() != null) {
+            comandaNotificacaoService.notificarAlteracao(aceita.getComanda().getNumero());
+        }
     }
 
     @PostMapping("/{id}/recusar")

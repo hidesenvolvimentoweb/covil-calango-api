@@ -2,6 +2,7 @@ package br.com.yugiapp.service;
 
 import br.com.yugiapp.dto.PagamentoResponseDTO;
 import br.com.yugiapp.enums.MetodoPagamentoEnum;
+import br.com.yugiapp.enums.FormaPagamentoEnum;
 import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusPagamentoEnum;
 import br.com.yugiapp.model.Comanda;
@@ -161,7 +162,7 @@ class PagamentoServiceTest {
 
         assertThat(pendente.getStatus()).isEqualTo(StatusPagamentoEnum.PAGO);
         assertThat(pendente.getDataHoraPagamento()).isNotNull();
-        verify(comandaService).alterarStatus(COMANDA, StatusComandaEnum.FECHADA);
+        verify(comandaService).fechar(COMANDA, FormaPagamentoEnum.PIX);
         ArgumentCaptor<PagamentoAtualizadoEvent> evento = ArgumentCaptor.forClass(PagamentoAtualizadoEvent.class);
         verify(eventPublisher).publishEvent(evento.capture());
         assertThat(evento.getValue().status()).isEqualTo(StatusPagamentoEnum.PAGO);
@@ -179,7 +180,7 @@ class PagamentoServiceTest {
         service.processarNotificacao(GATEWAY_ID);
 
         assertThat(pendente.getStatus()).isEqualTo(StatusPagamentoEnum.PENDENTE);
-        verify(comandaService, never()).alterarStatus(any(), any());
+        verify(comandaService, never()).fechar(any(), any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -201,7 +202,7 @@ class PagamentoServiceTest {
         service.processarNotificacao(GATEWAY_ID);
 
         assertThat(cancelado.getStatus()).isEqualTo(StatusPagamentoEnum.PAGO);
-        verify(comandaService).alterarStatus(COMANDA, StatusComandaEnum.FECHADA);
+        verify(comandaService).fechar(COMANDA, FormaPagamentoEnum.PIX);
     }
 
     @Test
@@ -214,7 +215,7 @@ class PagamentoServiceTest {
 
         verify(gateway).cancelar(GATEWAY_ID);
         assertThat(vencido.getStatus()).isEqualTo(StatusPagamentoEnum.EXPIRADO);
-        verify(comandaService, never()).alterarStatus(any(), any());
+        verify(comandaService, never()).fechar(any(), any());
     }
 
     @Test

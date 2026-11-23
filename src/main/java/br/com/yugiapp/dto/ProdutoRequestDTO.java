@@ -19,4 +19,12 @@ public class ProdutoRequestDTO {
     private Double valor;
     private String ingredientes;
     private Long prazo;
+    /** Unidades disponíveis para venda; nulo para não controlar o estoque. */
+    private Integer estoque;
+    /**
+     * Na alteração, o estoque só é gravado quando este campo é verdadeiro. Assim, salvar o produto por outro motivo
+     * (ex.: preço) não devolve ao estoque as unidades vendidas desde que o formulário foi aberto.
+     * No cadastro, o estoque informado é sempre gravado.
+     */
+    private Boolean alterarEstoque;
 }

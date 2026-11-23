@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!--
+        Forma de pagamento da comanda fechada (FormaPagamentoEnum). Comandas fechadas pelo PIX do app recebem PIX;
+        as demais fechadas antes desta versão ficam sem forma informada.
+    -->
+    <changeSet id="044-add-forma-pagamento-tb-comanda" author="covil-calango">
+        <addColumn schemaName="public" tableName="tb_comanda">
+            <column name="forma_pagamento" type="VARCHAR(20)"/>
+        </addColumn>
+        <sql>
+            UPDATE public.tb_comanda c
+            SET forma_pagamento = 'PIX'
+            WHERE EXISTS (SELECT 1 FROM public.tb_pagamento p WHERE p.fk_comanda = c.id AND p.status = 'PAGO')
+        </sql>
+        <rollback>
+            <dropColumn schemaName="public" tableName="tb_comanda" columnName="forma_pagamento"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

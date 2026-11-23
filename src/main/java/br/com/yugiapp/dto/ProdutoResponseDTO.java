@@ -19,4 +19,6 @@ public class ProdutoResponseDTO {
     private Double valor;
     private String ingredientes;
     private Long prazo;
+    /** Unidades disponíveis; nulo quando o produto não tem controle de estoque. Só exposto nas rotas de administração. */
+    private Integer estoque;
 }
