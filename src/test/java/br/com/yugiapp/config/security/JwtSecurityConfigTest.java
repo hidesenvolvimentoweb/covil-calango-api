@@ -59,7 +59,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest
 @ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
-        PedidoController.class, PagamentoController.class, GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
+        PedidoController.class, PagamentoController.class, br.com.yugiapp.controller.RelatorioController.class,
+        GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
         AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class})
 @TestPropertySource(properties = {
         "app.jwt.secret=segredo-de-teste-com-mais-de-32-caracteres",
@@ -82,6 +83,8 @@ class JwtSecurityConfigTest {
     @Autowired
     private JwtTokenService jwtTokenService;
 
+    @MockBean
+    private br.com.yugiapp.service.RelatorioService relatorioService;
     @MockBean
     private br.com.yugiapp.service.ComandaNotificacaoService comandaNotificacaoService;
     @MockBean
@@ -249,6 +252,16 @@ class JwtSecurityConfigTest {
         mockMvc.perform(get("/api/comanda/202615-99").header("Authorization", bearerVisitante(COMANDA)))
                 .andExpect(status().isForbidden());
         mockMvc.perform(put("/api/comanda/fechar/202615-99").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void relatoriosSaoExclusivosDoDashboard() throws Exception {
+        mockMvc.perform(get("/api/relatorio/diario").cookie(cookie(List.of(ADMIN))))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/relatorio/diario").cookie(cookie(List.of(ATENDENTE))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/relatorio/diario").header("Authorization", bearerVisitante(COMANDA)))
                 .andExpect(status().isForbidden());
     }
 

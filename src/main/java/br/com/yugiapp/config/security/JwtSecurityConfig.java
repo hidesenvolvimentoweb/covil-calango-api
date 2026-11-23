@@ -95,6 +95,8 @@ public class JwtSecurityConfig {
 
                         .requestMatchers("/api/solicitacao", "/api/solicitacao/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
 
+                        .requestMatchers("/api/relatorio", "/api/relatorio/**").hasAnyAuthority(exigir(WEB_DASHBOARD))
+
                         .requestMatchers("/api/usuario", "/api/usuario/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
                         .requestMatchers("/api/perfil", "/api/perfil/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
                         .requestMatchers("/api/permissao", "/api/permissao/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
