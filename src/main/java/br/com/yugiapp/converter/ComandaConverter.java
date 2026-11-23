@@ -15,7 +15,9 @@ public class ComandaConverter {
 
     public ComandaResponseDTO toResponseDTO(Comanda entity) {
         return ComandaResponseDTO.builder()
-                .usuario(UsuarioConvidadoResponseDTO.builder().nome(entity.getUsuario().getNome()).build())
+                // Comandas de visitante não têm usuário (o nome vai em nomeCliente); as antigas apontam para o "Visitante".
+                .usuario(entity.getUsuario() == null ? null
+                        : UsuarioConvidadoResponseDTO.builder().nome(entity.getUsuario().getNome()).build())
                 .nomeCliente(entity.getNomeCliente())
                 .numero(entity.getNumero())
                 .dataHoraEntrada(entity.getDataHoraEntrada())

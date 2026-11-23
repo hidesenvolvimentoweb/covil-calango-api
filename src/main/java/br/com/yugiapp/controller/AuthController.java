@@ -2,6 +2,7 @@ package br.com.yugiapp.controller;
 
 import br.com.yugiapp.config.security.AuthCookieService;
 import br.com.yugiapp.config.security.JwtTokenService;
+import br.com.yugiapp.config.security.LimiteTentativasService;
 import br.com.yugiapp.dto.EsqueciSenhaRequestDTO;
 import br.com.yugiapp.dto.LoginRequestDTO;
 import br.com.yugiapp.dto.PerfilResponseDTO;
@@ -9,6 +10,7 @@ import br.com.yugiapp.dto.RedefinirSenhaRequestDTO;
 import br.com.yugiapp.dto.UsuarioResponseDTO;
 import br.com.yugiapp.service.AuthService;
 import br.com.yugiapp.service.RecuperacaoSenhaService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
@@ -29,13 +32,26 @@ public class AuthController {
     private final RecuperacaoSenhaService recuperacaoSenhaService;
     private final JwtTokenService jwtTokenService;
     private final AuthCookieService authCookieService;
+    private final LimiteTentativasService limiteTentativasService;
+
+    /*
+     * Limites por IP (além dos limites por conta nos serviços). Generosos porque a equipe do bar costuma
+     * compartilhar a mesma rede: o objetivo é barrar o abuso automatizado, não o uso normal.
+     */
+    static final int MAXIMO_LOGINS_POR_IP = 30;
+    static final Duration JANELA_LOGINS_POR_IP = Duration.ofMinutes(15);
+    static final int MAXIMO_RECUPERACOES_POR_IP = 10;
+    static final Duration JANELA_RECUPERACOES_POR_IP = Duration.ofHours(1);
+    static final int MAXIMO_REDEFINICOES_POR_IP = 10;
+    static final Duration JANELA_REDEFINICOES_POR_IP = Duration.ofMinutes(15);
 
     /**
      * Autentica o usuário e grava o JWT da sessão em um cookie HttpOnly. O token não vai no corpo
      * da resposta, para que o JavaScript da página nunca tenha acesso a ele.
      */
     @PostMapping("/login")
-    public ResponseEntity<UsuarioResponseDTO> login(@RequestBody LoginRequestDTO loginRequestDTO) {
+    public ResponseEntity<UsuarioResponseDTO> login(@RequestBody LoginRequestDTO loginRequestDTO, HttpServletRequest request) {
+        limiteTentativasService.consumir("login-ip:" + request.getRemoteAddr(), MAXIMO_LOGINS_POR_IP, JANELA_LOGINS_POR_IP);
         UsuarioResponseDTO usuario = authService.login(loginRequestDTO);
         List<String> perfis = usuario.getPerfis() == null ? List.of() : usuario.getPerfis().stream()
                 .map(PerfilResponseDTO::getName)
@@ -57,12 +73,16 @@ public class AuthController {
     }
 
     @PostMapping("/esqueci-senha")
-    public void esqueciSenha(@RequestBody EsqueciSenhaRequestDTO request) {
+    public void esqueciSenha(@RequestBody EsqueciSenhaRequestDTO request, HttpServletRequest requisicao) {
+        limiteTentativasService.consumir("recuperacao-ip:" + requisicao.getRemoteAddr(),
+                MAXIMO_RECUPERACOES_POR_IP, JANELA_RECUPERACOES_POR_IP);
         recuperacaoSenhaService.solicitar(request.getEmail());
     }
 
     @PostMapping("/redefinir-senha")
-    public void redefinirSenha(@RequestBody RedefinirSenhaRequestDTO request) {
+    public void redefinirSenha(@RequestBody RedefinirSenhaRequestDTO request, HttpServletRequest requisicao) {
+        limiteTentativasService.consumir("redefinicao-ip:" + requisicao.getRemoteAddr(),
+                MAXIMO_REDEFINICOES_POR_IP, JANELA_REDEFINICOES_POR_IP);
         recuperacaoSenhaService.redefinir(request.getToken(), request.getSenhaTemporaria(), request.getPassword());
     }
 }

@@ -7,7 +7,6 @@ import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusSolicitacaoEnum;
 import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Solicitacao;
-import br.com.yugiapp.model.Usuario;
 import br.com.yugiapp.repository.SolicitacaoRepository;
 import br.com.yugiapp.specs.SolicitacaoSpecifications;
 import jakarta.transaction.Transactional;
@@ -113,13 +112,14 @@ public class SolicitacaoService {
         return save(solicitacao);
     }
 
+    /**
+     * Aceita a solicitação e abre a comanda do visitante. A solicitação fica bloqueada até o fim da transação: se
+     * dois atendentes aceitarem ao mesmo tempo, o segundo espera e recebe "já foi respondida", sem segunda comanda.
+     */
     @Transactional
-    public Solicitacao aceitarSolicitacao(Solicitacao solicitacao) {
-        // Evita gerar uma segunda comanda se a solicitação já foi respondida (ex.: dois atendentes ao mesmo tempo).
-        if (!StatusSolicitacaoEnum.EM_ANALISE.getValue().equals(solicitacao.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta solicitação já foi respondida");
-        }
-        Comanda comandaVisitante = comandaService.gerarComanda(Usuario.builder().nome(solicitacao.getNome()).id(1L).build());
+    public Solicitacao aceitarSolicitacao(Long id) {
+        Solicitacao solicitacao = buscarEmAnaliseParaResponder(id);
+        Comanda comandaVisitante = comandaService.gerarComanda(solicitacao.getNome());
         comandaVisitante.setCelular(solicitacao.getCelular());
         comandaVisitante.setNotificarWhatsapp(solicitacao.isNotificarWhatsapp());
         comandaService.save(comandaVisitante);
@@ -142,12 +142,18 @@ public class SolicitacaoService {
     }
 
     @Transactional
-    public Solicitacao recusarSolicitacao(Solicitacao solicitacao) {
+    public Solicitacao recusarSolicitacao(Long id) {
         // Uma solicitação já aceita tem comanda aberta e token emitido: recusá-la agora não desfaria isso.
+        return alterarStatus(buscarEmAnaliseParaResponder(id), StatusSolicitacaoEnum.RECUSADA);
+    }
+
+    /** Carrega a solicitação com bloqueio e garante que ninguém a respondeu antes. */
+    private Solicitacao buscarEmAnaliseParaResponder(Long id) {
+        Solicitacao solicitacao = solicitacaoRepository.findByIdParaAtualizacao(id).orElseThrow();
         if (!StatusSolicitacaoEnum.EM_ANALISE.getValue().equals(solicitacao.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta solicitação já foi respondida");
         }
-        return alterarStatus(solicitacao, StatusSolicitacaoEnum.RECUSADA);
+        return solicitacao;
     }
 
     private static String normalizarRequestId(String requestId) {

@@ -73,6 +73,10 @@ public class PedidoService {
     @Transactional
     public Pedido delete(Long id) {
         Pedido pedido = pedidoRepository.findByIdParaAtualizacao(id).orElseThrow();
+        // Um pedido cancelado já não entra no valor; os demais mudariam o total de um PIX já gerado.
+        if (pedido.getStatus() != StatusPedidoEnum.CANCELADO) {
+            exigirSemPixPendente(pedido, "excluir");
+        }
         boolean devolverEstoque = STATUS_QUE_DEVOLVEM_ESTOQUE.contains(pedido.getStatus());
         pedidoRepository.delete(pedido);
         if (devolverEstoque) {
@@ -108,6 +112,8 @@ public class PedidoService {
                 .produto(produto)
                 .observacao(observacao)
                 .quantidade(pedidoRequestDTO.getQuantidade())
+                // O preço do momento do pedido fica gravado: mudar o preço do produto depois não altera este pedido.
+                .valorUnitario(produto.getValor())
                 .comanda(comanda)
                 .build());
     }
@@ -122,6 +128,9 @@ public class PedidoService {
         if (!TRANSICOES_PERMITIDAS.getOrDefault(pedido.getStatus(), Set.of()).contains(status)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Não é possível alterar um pedido "
                     + descricao(pedido.getStatus()) + " para " + status.getValue());
+        }
+        if (status == StatusPedidoEnum.CANCELADO) {
+            exigirSemPixPendente(pedido, "cancelar");
         }
         pedido.setStatus(status);
         Pedido atualizado = pedidoRepository.save(pedido);
@@ -143,6 +152,18 @@ public class PedidoService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, produto.getEstoque() == 0
                     ? produto.getNome() + " esgotou. Escolha outro produto"
                     : "Não há unidades suficientes de " + produto.getNome() + " no momento. Diminua a quantidade do pedido");
+        }
+    }
+
+    /**
+     * O valor do PIX pendente foi fixado na geração: tirar um pedido da conta faria o cliente pagar a mais. A equipe
+     * cancela o PIX antes (na tela da comanda) e o cliente gera um novo com o valor certo.
+     */
+    private void exigirSemPixPendente(Pedido pedido, String acao) {
+        String numero = pedido.getComanda() == null ? null : pedido.getComanda().getNumero();
+        if (numero != null && pagamentoRepository.existsByComandaNumeroAndStatus(numero, StatusPagamentoEnum.PENDENTE)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento PIX em andamento para a comanda "
+                    + numero + ". Cancele o pagamento antes de " + acao + " o pedido");
         }
     }
 

@@ -78,7 +78,7 @@ public class JwtSecurityConfig {
                         .requestMatchers("/api/pedido/**").hasAnyAuthority(exigir(WEB_PEDIDOS))
 
                         .requestMatchers(HttpMethod.GET, "/api/comanda").hasAnyAuthority(exigir(WEB_COMANDAS, WEB_DASHBOARD))
-                        .requestMatchers(HttpMethod.GET, "/api/comanda/gerar/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
+                        .requestMatchers(HttpMethod.POST, "/api/comanda/gerar/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
                         // Consulta: o visitante só a própria comanda (validado no controller).
                         .requestMatchers(HttpMethod.GET, "/api/comanda/*").hasAnyAuthority(exigir(
                                 PERFIL_VISITANTE, WEB_COMANDAS, WEB_DASHBOARD))

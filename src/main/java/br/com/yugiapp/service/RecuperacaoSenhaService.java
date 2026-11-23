@@ -1,5 +1,7 @@
 package br.com.yugiapp.service;
 
+import br.com.yugiapp.config.security.LimiteTentativasService;
+import br.com.yugiapp.config.security.PoliticaSenha;
 import br.com.yugiapp.model.RecuperacaoSenha;
 import br.com.yugiapp.model.Usuario;
 import br.com.yugiapp.repository.RecuperacaoSenhaRepository;
@@ -18,6 +20,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -26,16 +29,19 @@ public class RecuperacaoSenhaService {
 
     private static final Duration VALIDADE_RECUPERACAO = Duration.ofMinutes(60);
     private static final Duration VALIDADE_PRIMEIRO_ACESSO = Duration.ofHours(48);
-    private static final int TAMANHO_MINIMO_SENHA = 6;
     private static final int TAMANHO_SENHA_TEMPORARIA = 10;
     // Sem caracteres ambíguos (0/O, 1/l/I) para facilitar a digitação.
     private static final String CARACTERES_SENHA_TEMPORARIA = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    /** E-mails de recuperação por endereço digitado, contra o envio em massa para uma mesma caixa. */
+    static final int MAXIMO_RECUPERACOES_POR_EMAIL = 3;
+    static final Duration JANELA_RECUPERACOES = Duration.ofHours(1);
 
     private final RecuperacaoSenhaRepository recuperacaoSenhaRepository;
     private final UsuarioService usuarioService;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final LimiteTentativasService limiteTentativasService;
 
     /**
      * Primeiro acesso de um usuário recém-aprovado: gera uma senha temporária aleatória, grava-a no usuário
@@ -50,6 +56,7 @@ public class RecuperacaoSenhaService {
         }
         usuario.setPassword(passwordEncoder.encode(senhaTemporaria));
         usuario.setSenhaTemporaria(true);
+        usuario.encerrarSessoes();
         Usuario salvo = usuarioService.save(usuario);
 
         String token = gerarToken(salvo.getId(), VALIDADE_PRIMEIRO_ACESSO);
@@ -68,6 +75,8 @@ public class RecuperacaoSenhaService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o e-mail");
         }
         String emailInformado = email.trim();
+        limiteTentativasService.consumir("recuperacao:" + emailInformado.toLowerCase(Locale.ROOT),
+                MAXIMO_RECUPERACOES_POR_EMAIL, JANELA_RECUPERACOES);
         Optional<Usuario> usuario = usuarioService.getByEmail(emailInformado)
                 .or(() -> usuarioService.getByEmail(emailInformado.toLowerCase()));
         if (usuario.isEmpty()) {
@@ -84,10 +93,7 @@ public class RecuperacaoSenhaService {
         if (token == null || token.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Link de recuperação inválido");
         }
-        if (novaSenha == null || novaSenha.length() < TAMANHO_MINIMO_SENHA) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "A senha deve possuir ao menos " + TAMANHO_MINIMO_SENHA + " caracteres");
-        }
+        PoliticaSenha.validar(novaSenha);
         RecuperacaoSenha recuperacao = recuperacaoSenhaRepository.findByTokenHash(hash(token.trim()))
                 .filter(r -> r.getDataHoraExpiracao().isAfter(LocalDateTime.now()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -107,6 +113,8 @@ public class RecuperacaoSenhaService {
         }
         usuario.setPassword(passwordEncoder.encode(novaSenha));
         usuario.setSenhaTemporaria(false);
+        // Quem estava logado com a senha antiga (inclusive quem a descobriu) precisa entrar de novo.
+        usuario.encerrarSessoes();
         usuarioService.save(usuario);
         recuperacaoSenhaRepository.deleteAllByUsuarioId(usuario.getId());
     }

@@ -2,7 +2,9 @@ package br.com.yugiapp.service;
 
 import br.com.yugiapp.config.security.JwtTokenService;
 import br.com.yugiapp.dto.SolicitacaoRequestDTO;
+import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusSolicitacaoEnum;
+import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Solicitacao;
 import br.com.yugiapp.repository.SolicitacaoRepository;
 import br.com.yugiapp.specs.SolicitacaoSpecifications;
@@ -14,6 +16,8 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,11 +32,12 @@ class SolicitacaoServiceTest {
     private static final String REQUEST_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
     private final SolicitacaoRepository repository = mock(SolicitacaoRepository.class);
+    private final ComandaService comandaService = mock(ComandaService.class);
     private SolicitacaoService service;
 
     @BeforeEach
     void configurar() {
-        service = new SolicitacaoService(repository, mock(ComandaService.class), mock(UsuarioService.class),
+        service = new SolicitacaoService(repository, comandaService, mock(UsuarioService.class),
                 new JwtTokenService("segredo-de-teste-com-mais-de-32-caracteres", 4, 24),
                 mock(SolicitacaoSpecifications.class));
         when(repository.save(any())).thenAnswer(invocacao -> invocacao.getArgument(0));
@@ -83,10 +88,15 @@ class SolicitacaoServiceTest {
         verify(repository, never()).save(any());
     }
 
+    private void solicitacaoNoBanco(StatusSolicitacaoEnum status) {
+        when(repository.findByIdParaAtualizacao(1L)).thenReturn(Optional.of(Solicitacao.builder().id(1L).nome("Ana")
+                .status(status.getValue()).build()));
+    }
+
     @Test
     void naoRecusaSolicitacaoJaRespondida() {
-        Solicitacao aceita = Solicitacao.builder().id(1L).status(StatusSolicitacaoEnum.ACEITA.getValue()).build();
-        assertThatThrownBy(() -> service.recusarSolicitacao(aceita))
+        solicitacaoNoBanco(StatusSolicitacaoEnum.ACEITA);
+        assertThatThrownBy(() -> service.recusarSolicitacao(1L))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         erro -> assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
         verify(repository, never()).save(any());
@@ -95,8 +105,37 @@ class SolicitacaoServiceTest {
 
     @Test
     void recusaSolicitacaoEmAnalise() {
-        Solicitacao emAnalise = Solicitacao.builder().id(1L).status(StatusSolicitacaoEnum.EM_ANALISE.getValue()).build();
-        assertThat(service.recusarSolicitacao(emAnalise).getStatus()).isEqualTo(StatusSolicitacaoEnum.RECUSADA.getValue());
+        solicitacaoNoBanco(StatusSolicitacaoEnum.EM_ANALISE);
+        assertThat(service.recusarSolicitacao(1L).getStatus()).isEqualTo(StatusSolicitacaoEnum.RECUSADA.getValue());
+    }
+
+    /**
+     * Dois atendentes aceitando ao mesmo tempo: a leitura com bloqueio faz o segundo esperar o primeiro terminar, e
+     * ele encontra a solicitação já aceita. Nenhuma segunda comanda é gerada.
+     */
+    @Test
+    void segundoAceiteNaoGeraOutraComanda() {
+        solicitacaoNoBanco(StatusSolicitacaoEnum.ACEITA);
+        assertThatThrownBy(() -> service.aceitarSolicitacao(1L))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        erro -> assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(comandaService, never()).gerarComanda(any());
+        verify(repository, never()).findById(any());
+    }
+
+    @Test
+    void aceiteAbreAComandaComONomeDoCliente() {
+        solicitacaoNoBanco(StatusSolicitacaoEnum.EM_ANALISE);
+        Comanda comanda = Comanda.builder().numero("20261123-5").status(StatusComandaEnum.EM_ANALISE.getValue()).build();
+        when(comandaService.gerarComanda("Ana")).thenReturn(comanda);
+        when(comandaService.alterarStatus("20261123-5", StatusComandaEnum.ABERTA)).thenReturn(Comanda.builder()
+                .numero("20261123-5").status(StatusComandaEnum.ABERTA.getValue()).build());
+
+        Solicitacao aceita = service.aceitarSolicitacao(1L);
+
+        assertThat(aceita.getStatus()).isEqualTo(StatusSolicitacaoEnum.ACEITA.getValue());
+        assertThat(aceita.getComanda().getNumero()).isEqualTo("20261123-5");
+        assertThat(aceita.getToken()).isNotBlank();
     }
 
     @Test

@@ -61,7 +61,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
         PedidoController.class, PagamentoController.class, br.com.yugiapp.controller.RelatorioController.class,
         GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
-        AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class})
+        AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class,
+        LimiteTentativasService.class})
 @TestPropertySource(properties = {
         "app.jwt.secret=segredo-de-teste-com-mais-de-32-caracteres",
         "app.cors.allowed-origins=http://web.local"
@@ -96,6 +97,8 @@ class JwtSecurityConfigTest {
     @MockBean
     private PermissaoPerfilService permissaoPerfilService;
     @MockBean
+    private SessaoUsuarioService sessaoUsuarioService;
+    @MockBean
     private ComandaService comandaService;
     @MockBean
     private PedidoService pedidoService;
@@ -110,6 +113,7 @@ class JwtSecurityConfigTest {
 
     @BeforeEach
     void configurarPermissoes() {
+        when(sessaoUsuarioService.sessaoValida(any(), any())).thenReturn(true);
         when(permissaoPerfilService.autoridades(any())).thenAnswer(invocacao -> {
             List<String> perfis = invocacao.getArgument(0);
             Set<String> autoridades = new LinkedHashSet<>(perfis);
@@ -342,5 +346,52 @@ class JwtSecurityConfigTest {
                         .header("x-signature", "ts=1,v1=00").header("x-request-id", "req-2"))
                 .andExpect(status().isUnauthorized());
         verify(pagamentoService, never()).processarNotificacao("456");
+    }
+
+    @Test
+    void sessaoEncerradaNaoAutenticaMais() throws Exception {
+        // Ex.: a senha foi trocada ou os perfis mudaram depois que o token foi emitido.
+        when(sessaoUsuarioService.sessaoValida(any(), any())).thenReturn(false);
+        mockMvc.perform(get("/api/relatorio/diario").cookie(cookie(List.of(ADMIN))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void tokenDoVisitanteNaoDependeDaSessaoDeUsuario() throws Exception {
+        when(sessaoUsuarioService.sessaoValida(any(), any())).thenReturn(false);
+        when(comandaService.getResponseDTOByNumero(COMANDA)).thenReturn(ComandaResponseDTO.builder().numero(COMANDA).build());
+        mockMvc.perform(get("/api/comanda/" + COMANDA).header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void gerarComandaSoPorPostComProtecaoCsrf() throws Exception {
+        when(comandaService.gerarComandaDTO("Ana")).thenReturn(ComandaResponseDTO.builder().numero(COMANDA).build());
+        // GET não cria mais comanda: um link aberto por um atendente logado não tem efeito.
+        mockMvc.perform(get("/api/comanda/gerar/Ana").cookie(cookie(List.of(ADMIN))))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(200));
+        // POST só com o cabeçalho anti-CSRF, que um site de terceiros não consegue enviar.
+        mockMvc.perform(post("/api/comanda/gerar/Ana").cookie(cookie(List.of(ADMIN))))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/comanda/gerar/Ana").cookie(cookie(List.of(ADMIN)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+        verify(comandaService).gerarComandaDTO("Ana");
+    }
+
+    @Test
+    void loginTemLimitePorIp() throws Exception {
+        for (int i = 0; i < 30; i++) {
+            mockMvc.perform(post("/api/auth/login").contentType("application/json").content("{}")
+                    .with(requisicao -> { requisicao.setRemoteAddr("10.9.9.9"); return requisicao; }));
+        }
+        mockMvc.perform(post("/api/auth/login").contentType("application/json").content("{}")
+                        .with(requisicao -> { requisicao.setRemoteAddr("10.9.9.9"); return requisicao; }))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.message").value(containsString("Muitas tentativas")));
+        // Outro IP segue liberado.
+        mockMvc.perform(post("/api/auth/login").contentType("application/json").content("{}")
+                        .with(requisicao -> { requisicao.setRemoteAddr("10.9.9.10"); return requisicao; }))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(429));
     }
 }

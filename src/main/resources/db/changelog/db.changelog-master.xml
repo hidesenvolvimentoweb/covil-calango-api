@@ -27,4 +27,6 @@
     <include file="db/changelog/changes/021-create-tb-pagamento.xml"/>
     <include file="db/changelog/changes/022-add-estoque-tb-produto.xml"/>
     <include file="db/changelog/changes/023-add-forma-pagamento-tb-comanda.xml"/>
+    <include file="db/changelog/changes/024-add-acesso-alterado-em-tb-usuario.xml"/>
+    <include file="db/changelog/changes/025-add-valor-unitario-tb-pedido.xml"/>
 </databaseChangeLog>

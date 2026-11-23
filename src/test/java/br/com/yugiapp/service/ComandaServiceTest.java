@@ -14,6 +14,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,5 +72,29 @@ class ComandaServiceTest {
         assertThatThrownBy(() -> service.fechar(COMANDA, null))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         erro -> assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    void comandaDoVisitanteNaoFicaLigadaANenhumUsuario() {
+        when(comandaRepository.save(any())).thenAnswer(invocacao -> {
+            Comanda comanda = invocacao.getArgument(0);
+            if (comanda.getId() == null) {
+                comanda.setId(42L);
+            }
+            return comanda;
+        });
+
+        Comanda comanda = service.gerarComanda("Ana");
+
+        assertThat(comanda.getUsuario()).isNull();
+        assertThat(comanda.getNomeCliente()).isEqualTo("Ana");
+        assertThat(comanda.getNumero()).endsWith("-42");
+    }
+
+    @Test
+    void numeroDaComandaUsaODiaDoEstabelecimento() {
+        // Sem a propriedade (como neste teste), vale o fuso de Brasília, igual ao app.fuso-horario padrão.
+        LocalDate hoje = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        assertThat(service.numeroDaComanda(7L)).isEqualTo(String.valueOf(hoje.getYear()) + hoje.getDayOfMonth() + "-7");
     }
 }

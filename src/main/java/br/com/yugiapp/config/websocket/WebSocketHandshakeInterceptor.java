@@ -25,6 +25,8 @@ import java.util.Map;
 public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {
 
     public static final String ATRIBUTO_TOKEN_COOKIE = "covil.tokenCookie";
+    /** IP do cliente (já resolvido a partir do X-Forwarded-For do Nginx), usado nos limites de tentativas. */
+    public static final String ATRIBUTO_IP = "covil.ip";
 
     private final AuthCookieService authCookieService;
     private final OrigensConfiaveis origensConfiaveis;
@@ -32,6 +34,9 @@ public class WebSocketHandshakeInterceptor implements HandshakeInterceptor {
     @Override
     public boolean beforeHandshake(@NonNull ServerHttpRequest request, @NonNull ServerHttpResponse response,
                                    @NonNull WebSocketHandler wsHandler, @NonNull Map<String, Object> attributes) {
+        if (request instanceof ServletServerHttpRequest servletRequest) {
+            attributes.put(ATRIBUTO_IP, servletRequest.getServletRequest().getRemoteAddr());
+        }
         if (request instanceof ServletServerHttpRequest servletRequest
                 && origensConfiaveis.contem(request.getHeaders().getOrigin())) {
             String token = authCookieService.ler(servletRequest.getServletRequest());

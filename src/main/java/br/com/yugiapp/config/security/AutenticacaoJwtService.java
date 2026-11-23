@@ -24,9 +24,21 @@ public class AutenticacaoJwtService {
 
     private final JwtTokenService jwtTokenService;
     private final PermissaoPerfilService permissaoPerfilService;
+    private final SessaoUsuarioService sessaoUsuarioService;
 
+    /**
+     * Autentica o token. O de usuário do web também precisa de uma sessão ainda válida: é recusado depois de uma
+     * troca de senha ou de perfis, ou se o usuário foi excluído (ver {@link SessaoUsuarioService}).
+     */
     public Optional<Authentication> autenticar(String token) {
-        return jwtTokenService.validar(token).map(this::criarAutenticacao);
+        return jwtTokenService.validar(token)
+                .filter(this::sessaoValida)
+                .map(this::criarAutenticacao);
+    }
+
+    private boolean sessaoValida(DecodedJWT jwt) {
+        boolean visitante = jwt.getClaim(JwtTokenService.CLAIM_COMANDA).asString() != null;
+        return visitante || sessaoUsuarioService.sessaoValida(jwt.getSubject(), jwt.getIssuedAtAsInstant());
     }
 
     /** Indica se a autenticação possui alguma das autoridades informadas. */

@@ -16,7 +16,7 @@ public class PedidoConverter {
                 .nomeProduto(entity.getProduto().getNome())
                 .quantidade(entity.getQuantidade())
                 .observacao(entity.getObservacao())
-                .valorProduto(entity.getProduto().getValor())
+                .valorProduto(entity.precoUnitarioCobrado())
                 .build();
     }
 

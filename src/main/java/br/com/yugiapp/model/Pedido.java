@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -44,4 +45,28 @@ public class Pedido implements Serializable {
 
     @Column(name = "QUANTIDADE")
     private Long quantidade;
+
+    /**
+     * Preço unitário do produto no momento do pedido. Mudar o preço do produto depois não altera os pedidos já
+     * feitos (nem as comandas fechadas e os relatórios).
+     */
+    @Column(name = "VALOR_UNITARIO")
+    private Double valorUnitario;
+
+    /** Preço cobrado por unidade: o gravado no pedido ou, na falta dele, o preço atual do produto. */
+    public Double precoUnitarioCobrado() {
+        if (valorUnitario != null) {
+            return valorUnitario;
+        }
+        return produto == null ? null : produto.getValor();
+    }
+
+    /** Valor do pedido (preço cobrado x quantidade), em BigDecimal para somar sem erros de arredondamento. */
+    public BigDecimal valorTotal() {
+        Double preco = precoUnitarioCobrado();
+        if (preco == null || quantidade == null) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(preco).multiply(BigDecimal.valueOf(quantidade));
+    }
 }

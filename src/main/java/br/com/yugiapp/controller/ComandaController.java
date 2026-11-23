@@ -58,7 +58,8 @@ public class ComandaController {
         return comandaService.getAllByFilters(comandaFilterRequestDTO);
     }
 
-    @GetMapping(path = "/gerar/{nome}")
+    /** POST (e não GET): cria dados, então precisa da proteção contra requisições forjadas (CSRF) do filtro. */
+    @PostMapping(path = "/gerar/{nome}")
     public ComandaResponseDTO gerarComandaEntrada(@PathVariable String nome) {
         ComandaResponseDTO comanda = comandaService.gerarComandaDTO(nome);
         comandaNotificacaoService.notificarAlteracao(comanda.getNumero());

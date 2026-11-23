@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Data
@@ -56,4 +58,18 @@ public class Usuario implements Serializable {
             joinColumns = @JoinColumn(name = "id_usuario"),
             inverseJoinColumns = @JoinColumn(name = "id_perfil"))
     private List<Perfil> perfis;
+
+    /**
+     * Última troca de senha ou de perfis. As sessões (JWT) emitidas antes deste momento são recusadas
+     * (ver SessaoUsuarioService); nulo quando nada mudou.
+     */
+    @JsonIgnore
+    @Column(name = "ACESSO_ALTERADO_EM")
+    private LocalDateTime acessoAlteradoEm;
+
+    /** Encerra todas as sessões abertas do usuário: quem estava logado precisa entrar novamente. */
+    public void encerrarSessoes() {
+        // O JWT guarda a emissão em segundos; truncar evita recusar o login feito logo depois, no mesmo segundo.
+        this.acessoAlteradoEm = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+    }
 }

@@ -1,6 +1,7 @@
 package br.com.yugiapp.service;
 
 import br.com.yugiapp.config.security.JwtTokenService;
+import br.com.yugiapp.config.security.PoliticaSenha;
 import br.com.yugiapp.dto.UsuarioConvidadoResponseDTO;
 import br.com.yugiapp.dto.PerfilResponseDTO;
 import br.com.yugiapp.dto.UsuarioRequestDTO;
@@ -68,6 +69,9 @@ public class UsuarioService {
 
     @Transactional
     public Usuario create(UsuarioRequestDTO request) {
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            PoliticaSenha.validar(request.getPassword());
+        }
         if (request.getEmail() != null && usuarioRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "E-mail já cadastrado");
         }
@@ -97,8 +101,10 @@ public class UsuarioService {
         usuario.setContato(request.getContato());
         usuario.setEmail(request.getEmail());
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            PoliticaSenha.validar(request.getPassword());
             usuario.setPassword(encodePassword(request.getPassword()));
             usuario.setSenhaTemporaria(false);
+            usuario.encerrarSessoes();
         }
         return usuarioRepository.save(usuario);
     }
@@ -113,6 +119,7 @@ public class UsuarioService {
         }
         if (usuario.getPerfis().stream().noneMatch(existing -> existing.getId().equals(perfilId))) {
             usuario.getPerfis().add(perfil);
+            usuario.encerrarSessoes();
         }
         return usuarioRepository.save(usuario);
     }
@@ -124,7 +131,9 @@ public class UsuarioService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Perfil não encontrado");
         }
         if (usuario.getPerfis() != null) {
-            usuario.getPerfis().removeIf(perfil -> perfil.getId().equals(perfilId));
+            if (usuario.getPerfis().removeIf(perfil -> perfil.getId().equals(perfilId))) {
+                usuario.encerrarSessoes();
+            }
         }
         return usuarioRepository.save(usuario);
     }

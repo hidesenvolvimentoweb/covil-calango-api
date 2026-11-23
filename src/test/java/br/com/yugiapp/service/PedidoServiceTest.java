@@ -4,6 +4,7 @@ import br.com.yugiapp.converter.PedidoConverter;
 import br.com.yugiapp.dto.PedidoRequestDTO;
 import br.com.yugiapp.dto.ProdutoRequestDTO;
 import br.com.yugiapp.enums.StatusComandaEnum;
+import br.com.yugiapp.enums.StatusPagamentoEnum;
 import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
@@ -209,5 +210,66 @@ class PedidoServiceTest {
                 .isEqualTo(PedidoService.QUANTIDADE_MAXIMA);
         assertThat(Produto.builder().estoque(7).build().getQuantidadeMaximaPedido()).isEqualTo(7);
         assertThat(Produto.builder().estoque(0).build().getQuantidadeMaximaPedido()).isZero();
+    }
+
+    @Test
+    void gravaOPrecoDoMomentoDoPedido() {
+        Pedido salvo = service.save(pedido(2L));
+
+        assertThat(salvo.getValorUnitario()).isEqualTo(10.0);
+        // Mudar o preço do produto depois não altera o valor do pedido já feito.
+        salvo.getProduto().setValor(15.0);
+        assertThat(salvo.valorTotal()).isEqualByComparingTo("20.0");
+    }
+
+    @Test
+    void pedidoAntigoSemPrecoGravadoUsaOPrecoDoProduto() {
+        Pedido antigo = Pedido.builder().produto(Produto.builder().valor(7.5).build()).quantidade(2L).build();
+        assertThat(antigo.valorTotal()).isEqualByComparingTo("15.0");
+    }
+
+    private Pedido pedidoDaComandaComPix(StatusPedidoEnum status) {
+        Pedido pedido = Pedido.builder().id(1L).status(status).quantidade(1L)
+                .produto(Produto.builder().id(1L).valor(10.0).build())
+                .comanda(Comanda.builder().numero(COMANDA).build()).build();
+        when(pedidoRepository.findByIdParaAtualizacao(1L)).thenReturn(Optional.of(pedido));
+        when(pagamentoRepository.existsByComandaNumeroAndStatus(COMANDA, StatusPagamentoEnum.PENDENTE)).thenReturn(true);
+        return pedido;
+    }
+
+    @Test
+    void naoCancelaPedidoComPixPendente() {
+        pedidoDaComandaComPix(StatusPedidoEnum.SOLICITADO);
+
+        assertThatThrownBy(() -> service.alterarStatus(1L, StatusPedidoEnum.CANCELADO))
+                .isInstanceOfSatisfying(ResponseStatusException.class, erro -> {
+                    assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(erro.getReason()).contains("Cancele o pagamento antes de cancelar o pedido");
+                });
+        verify(pedidoRepository, never()).save(any());
+        verify(produtoRepository, never()).devolverEstoque(any(), anyInt());
+    }
+
+    @Test
+    void naoExcluiPedidoComPixPendente() {
+        pedidoDaComandaComPix(StatusPedidoEnum.EM_ANDAMENTO);
+
+        assertThatThrownBy(() -> service.delete(1L))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        erro -> assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(pedidoRepository, never()).delete(any());
+    }
+
+    @Test
+    void comPixPendenteACozinhaSegueOFluxoEOCanceladoPodeSerExcluido() {
+        // Avançar o pedido não muda o valor cobrado.
+        pedidoDaComandaComPix(StatusPedidoEnum.SOLICITADO);
+        assertThat(service.alterarStatus(1L, StatusPedidoEnum.EM_ANDAMENTO).getStatus())
+                .isEqualTo(StatusPedidoEnum.EM_ANDAMENTO);
+
+        // Um pedido cancelado já está fora do valor.
+        pedidoDaComandaComPix(StatusPedidoEnum.CANCELADO);
+        service.delete(1L);
+        verify(pedidoRepository).delete(any());
     }
 }

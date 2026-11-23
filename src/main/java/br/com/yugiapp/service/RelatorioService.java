@@ -256,11 +256,9 @@ public class RelatorioService {
         return pedido.getQuantidade() == null ? 0 : pedido.getQuantidade();
     }
 
+    /** Valor com o preço gravado no pedido: os relatórios de dias anteriores não mudam quando o preço muda. */
     private static BigDecimal valor(Pedido pedido) {
-        if (pedido.getProduto() == null || pedido.getProduto().getValor() == null) {
-            return BigDecimal.ZERO;
-        }
-        return BigDecimal.valueOf(pedido.getProduto().getValor()).multiply(BigDecimal.valueOf(quantidade(pedido)));
+        return pedido.valorTotal();
     }
 
     private static BigDecimal soma(java.util.stream.Stream<BigDecimal> valores) {

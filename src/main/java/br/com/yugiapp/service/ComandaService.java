@@ -11,10 +11,10 @@ import br.com.yugiapp.enums.StatusComandaEnum;
 import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
-import br.com.yugiapp.model.Usuario;
 import br.com.yugiapp.repository.ComandaRepository;
 import br.com.yugiapp.specs.ComandaSpecifications;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,7 +23,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,6 +43,12 @@ public class ComandaService {
     private final UsuarioService usuarioService;
     private final PedidoService pedidoService;
     private final PagamentoRepository pagamentoRepository;
+
+    private static final String FUSO_PADRAO = "America/Sao_Paulo";
+    /** Fuso do estabelecimento, o mesmo dos relatórios (app.fuso-horario). Fora do construtor por causa do @Lazy. */
+    @Value("${app.fuso-horario:" + FUSO_PADRAO + "}")
+    private String fusoHorario;
+
     /** Pedidos que entram no valor da comanda: todos, exceto os cancelados. */
     private static final List<String> STATUS_COBRADOS = List.of(
             StatusPedidoEnum.SOLICITADO.name(),
@@ -88,27 +96,38 @@ public class ComandaService {
     }
 
     public ComandaResponseDTO gerarComandaDTO(String nome) {
-        Usuario usuario = Usuario.builder().id(1L).nome(nome).build();
-        Comanda comandaCompleta = gerarComanda(usuario);
+        Comanda comandaCompleta = gerarComanda(nome);
         return ComandaResponseDTO.builder()
                 .numero(comandaCompleta.getNumero())
                 .dataHoraEntrada(comandaCompleta.getDataHoraEntrada())
                 .nomeCliente(comandaCompleta.getNomeCliente())
-                .usuario(usuarioService.criarUsuarioConvidado(usuario.getNome(), comandaCompleta.getNumero()))
+                .usuario(usuarioService.criarUsuarioConvidado(nome, comandaCompleta.getNumero()))
                 .build();
     }
 
-    public Comanda gerarComanda(Usuario usuario) {
+    /**
+     * Cria a comanda de um cliente visitante. Ela não fica ligada a nenhum usuário cadastrado: o nome do cliente vai
+     * em {@code nomeCliente} (as comandas antigas apontavam para o usuário "Visitante", de id 1).
+     */
+    public Comanda gerarComanda(String nomeCliente) {
         Comanda comandaSemNumero = comandaRepository.save(
                 Comanda.builder()
                         .dataHoraEntrada(LocalDateTime.now())
-                        .usuario(usuario)
-                        .nomeCliente(usuario.getNome())
+                        .nomeCliente(nomeCliente)
                         .status(StatusComandaEnum.EM_ANALISE.getValue())
                         .build());
-        LocalDateTime agora = LocalDateTime.now();
-        comandaSemNumero.setNumero(String.valueOf(agora.getYear()) + agora.getDayOfMonth() + "-" + comandaSemNumero.getId());
+        comandaSemNumero.setNumero(numeroDaComanda(comandaSemNumero.getId()));
         return comandaRepository.save(comandaSemNumero);
+    }
+
+    /** Ano e dia no fuso do estabelecimento (o da JVM é UTC no container: à noite já seria o dia seguinte). */
+    String numeroDaComanda(Long id) {
+        LocalDate hoje = LocalDate.now(fusoDoEstabelecimento());
+        return String.valueOf(hoje.getYear()) + hoje.getDayOfMonth() + "-" + id;
+    }
+
+    private ZoneId fusoDoEstabelecimento() {
+        return fusoHorario == null || fusoHorario.isBlank() ? ZoneId.of(FUSO_PADRAO) : ZoneId.of(fusoHorario);
     }
 
     public Comanda alterarStatus(String numero, StatusComandaEnum statusComandaEnum) {
@@ -155,7 +174,8 @@ public class ComandaService {
                 .status(STATUS_COBRADOS).build();
         List<Pedido> pedidosDaComanda = pedidoService.getAllByFilters(filtros);
         return pedidosDaComanda.stream()
-                .map(p -> BigDecimal.valueOf(p.getProduto().getValor()).multiply(BigDecimal.valueOf(p.getQuantidade())))
+                // Preço gravado em cada pedido: mudar o preço do produto não altera o que já foi pedido.
+                .map(Pedido::valorTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
     }

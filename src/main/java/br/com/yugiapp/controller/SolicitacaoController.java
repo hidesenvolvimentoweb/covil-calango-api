@@ -1,5 +1,7 @@
 package br.com.yugiapp.controller;
 
+import br.com.yugiapp.config.security.LimiteTentativasService;
+import br.com.yugiapp.config.websocket.WebSocketHandshakeInterceptor;
 import br.com.yugiapp.config.websocket.WebSocketSecurityInterceptor;
 import br.com.yugiapp.dto.SolicitacaoFilterRequestDTO;
 import br.com.yugiapp.dto.SolicitacaoRequestDTO;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,8 +39,15 @@ public class SolicitacaoController {
     /** Limite de solicitações de comanda por conexão do WebSocket, contra o envio em massa. */
     static final int MAXIMO_SOLICITACOES_POR_CONEXAO = 5;
     private static final String ATRIBUTO_SOLICITACOES = "covil.solicitacoesEnviadas";
+    /**
+     * Limite por IP, para quem abre várias conexões. Folgado porque os clientes no Wi-Fi do bar saem pelo mesmo IP.
+     */
+    static final int MAXIMO_SOLICITACOES_POR_IP = 30;
+    static final Duration JANELA_SOLICITACOES_POR_IP = Duration.ofMinutes(10);
 
     private final SolicitacaoService solicitacaoService;
+
+    private final LimiteTentativasService limiteTentativasService;
 
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -78,6 +88,12 @@ public class SolicitacaoController {
                     MAXIMO_SOLICITACOES_POR_CONEXAO);
             return;
         }
+        String ip = ipDaConexao(headerAccessor);
+        if (ip != null && !limiteTentativasService.tentar("solicitacao-ip:" + ip, MAXIMO_SOLICITACOES_POR_IP,
+                JANELA_SOLICITACOES_POR_IP)) {
+            log.warn("IP {} excedeu o limite de {} solicitações de comanda", ip, MAXIMO_SOLICITACOES_POR_IP);
+            return;
+        }
         solicitacaoService.solicitar(solicitacaoRequestDTO)
                 .ifPresent(solicitacao -> messagingTemplate.convertAndSend("/topic/solicitacoes", resumo(solicitacao)));
     }
@@ -94,9 +110,8 @@ public class SolicitacaoController {
      */
     @PostMapping("/{id}/aceitar")
     public void aceitarSolicitacao(@PathVariable Long id) {
-        Solicitacao solicitacao = solicitacaoService.getById(id);
-        Solicitacao aceita = solicitacaoService.aceitarSolicitacao(solicitacao);
-        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), aceita);
+        Solicitacao aceita = solicitacaoService.aceitarSolicitacao(id);
+        messagingTemplate.convertAndSend("/topic/comanda/" + aceita.getSessionId(), aceita);
         // A comanda aberta no aceite aparece na hora na tela de comandas.
         if (aceita.getComanda() != null) {
             comandaNotificacaoService.notificarAlteracao(aceita.getComanda().getNumero());
@@ -105,8 +120,13 @@ public class SolicitacaoController {
 
     @PostMapping("/{id}/recusar")
     public void recusarSolicitacao(@PathVariable Long id) {
-        Solicitacao solicitacao = solicitacaoService.getById(id);
-        messagingTemplate.convertAndSend("/topic/comanda/" + solicitacao.getSessionId(), solicitacaoService.recusarSolicitacao(solicitacao));
+        Solicitacao recusada = solicitacaoService.recusarSolicitacao(id);
+        messagingTemplate.convertAndSend("/topic/comanda/" + recusada.getSessionId(), recusada);
+    }
+
+    private static String ipDaConexao(SimpMessageHeaderAccessor headerAccessor) {
+        Map<String, Object> atributos = headerAccessor.getSessionAttributes();
+        return atributos == null ? null : (String) atributos.get(WebSocketHandshakeInterceptor.ATRIBUTO_IP);
     }
 
     private boolean dentroDoLimiteDaConexao(SimpMessageHeaderAccessor headerAccessor) {

@@ -5,6 +5,7 @@ import br.com.yugiapp.config.security.AutenticacaoJwtService;
 import br.com.yugiapp.config.security.JwtTokenService;
 import br.com.yugiapp.config.security.OrigensConfiaveis;
 import br.com.yugiapp.config.security.PermissaoPerfilService;
+import br.com.yugiapp.config.security.SessaoUsuarioService;
 import br.com.yugiapp.config.security.Permissoes;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,7 +60,9 @@ class WebSocketSecurityInterceptorTest {
             perfis.forEach(perfil -> autoridades.addAll(PERMISSOES_POR_PERFIL.getOrDefault(perfil, List.of())));
             return autoridades;
         });
-        autenticacaoJwtService = new AutenticacaoJwtService(jwtTokenService, permissaoPerfilService);
+        SessaoUsuarioService sessaoUsuarioService = mock(SessaoUsuarioService.class);
+        when(sessaoUsuarioService.sessaoValida(any(), any())).thenReturn(true);
+        autenticacaoJwtService = new AutenticacaoJwtService(jwtTokenService, permissaoPerfilService, sessaoUsuarioService);
         interceptor = new WebSocketSecurityInterceptor(autenticacaoJwtService);
     }
 
@@ -189,8 +192,12 @@ class WebSocketSecurityInterceptorTest {
 
         assertThat(atributosDoHandshake(handshake, "http://web.local"))
                 .containsEntry(WebSocketHandshakeInterceptor.ATRIBUTO_TOKEN_COOKIE, "token-do-cookie");
-        assertThat(atributosDoHandshake(handshake, "http://malicioso.local")).isEmpty();
-        assertThat(atributosDoHandshake(handshake, null)).isEmpty();
+        assertThat(atributosDoHandshake(handshake, "http://malicioso.local"))
+                .doesNotContainKey(WebSocketHandshakeInterceptor.ATRIBUTO_TOKEN_COOKIE);
+        assertThat(atributosDoHandshake(handshake, null))
+                .doesNotContainKey(WebSocketHandshakeInterceptor.ATRIBUTO_TOKEN_COOKIE)
+                // O IP fica guardado para o limite de solicitações de comanda por IP.
+                .containsEntry(WebSocketHandshakeInterceptor.ATRIBUTO_IP, "127.0.0.1");
     }
 
     private Map<String, Object> atributosDoHandshake(WebSocketHandshakeInterceptor handshake, String origem) throws Exception {

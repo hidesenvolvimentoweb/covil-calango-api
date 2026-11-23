@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!--
+        Preço unitário do produto no momento do pedido: mudar o preço do produto depois não altera pedidos já feitos,
+        comandas fechadas nem relatórios. Os pedidos anteriores recebem o preço atual do produto (o único conhecido).
+    -->
+    <changeSet id="046-add-valor-unitario-tb-pedido" author="covil-calango">
+        <addColumn schemaName="public" tableName="tb_pedido">
+            <column name="valor_unitario" type="DOUBLE PRECISION"/>
+        </addColumn>
+        <sql>
+            UPDATE public.tb_pedido p
+            SET valor_unitario = pr.valor
+            FROM public.tb_produto pr
+            WHERE pr.id = p.fk_produto
+        </sql>
+        <rollback>
+            <dropColumn schemaName="public" tableName="tb_pedido" columnName="valor_unitario"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

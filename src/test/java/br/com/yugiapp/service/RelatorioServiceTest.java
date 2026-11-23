@@ -152,6 +152,22 @@ class RelatorioServiceTest {
         assertThat(relatorio.produtos()).isEmpty();
     }
 
+    @Test
+    void usaOPrecoGravadoNoPedidoENaoOPrecoAtualDoProduto() {
+        // A água custava 5,00 quando foi pedida; depois o preço do produto subiu para 50,00.
+        Produto aguaReajustada = Produto.builder().id(1L).nome("Água").valor(50.0).categoria(CategoriaProdutoEnum.BEBIDAS)
+                .build();
+        Pedido aguaTarde = pedido(StatusPedidoEnum.FINALIZADO, aguaReajustada, 2, tarde, LocalDateTime.of(2026, 11, 23, 18, 10));
+        aguaTarde.setValorUnitario(5.0);
+        when(pedidoRepository.findDoPeriodo(INICIO_UTC, FIM_UTC)).thenReturn(List.of(aguaTarde));
+        when(pedidoRepository.findByComandaIn(any())).thenReturn(List.of(aguaTarde));
+
+        RelatorioDiarioDTO relatorio = service.gerarDiario(DIA);
+
+        assertThat(relatorio.arrecadado()).isEqualByComparingTo("10.00");
+        assertThat(relatorio.vendido()).isEqualByComparingTo("10.00");
+    }
+
     /** O Spring cria o serviço como na subida da API (dois construtores: precisa saber qual usar). */
     @Test
     void springConsegueCriarOServico() {
