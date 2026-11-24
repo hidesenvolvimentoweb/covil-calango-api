@@ -10,6 +10,7 @@ import br.com.yugiapp.enums.StatusPedidoEnum;
 import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.model.Produto;
+import br.com.yugiapp.repository.EventoParticipanteRepository;
 import br.com.yugiapp.repository.PagamentoRepository;
 import br.com.yugiapp.repository.PedidoRepository;
 import br.com.yugiapp.repository.ProdutoRepository;
@@ -48,6 +49,7 @@ public class PedidoService {
     private final PedidoSpecifications pedidoSpecifications;
     private final PedidoConverter pedidoConverter;
     private final PagamentoRepository pagamentoRepository;
+    private final EventoParticipanteRepository eventoParticipanteRepository;
 
     public Page<Pedido> getAll(Pageable pageable) {
         return pedidoRepository.findAll(pageable);
@@ -77,6 +79,8 @@ public class PedidoService {
         if (pedido.getStatus() != StatusPedidoEnum.CANCELADO) {
             exigirSemPixPendente(pedido, "excluir");
         }
+        // Pedido de inscrição em evento: excluí-lo pela comanda também tira o cliente do evento.
+        eventoParticipanteRepository.deleteByPedidoId(pedido.getId());
         boolean devolverEstoque = STATUS_QUE_DEVOLVEM_ESTOQUE.contains(pedido.getStatus());
         pedidoRepository.delete(pedido);
         if (devolverEstoque) {

@@ -35,9 +35,14 @@ public class Pedido implements Serializable {
     @Column(name = "OBSERVACAO")
     private String observacao;
 
+    /** Nulo nos itens que não são produtos do cardápio, como a inscrição em um evento (ver {@link #descricao}). */
     @ManyToOne
     @JoinColumn(name = "FK_PRODUTO")
     private Produto produto;
+
+    /** Nome do item sem produto, gravado na criação (ex.: "Evento - Torneio Locals"). */
+    @Column(name = "DESCRICAO")
+    private String descricao;
 
     @ManyToOne
     @JoinColumn(name = "FK_COMANDA")
@@ -52,6 +57,11 @@ public class Pedido implements Serializable {
      */
     @Column(name = "VALOR_UNITARIO")
     private Double valorUnitario;
+
+    /** Nome exibido na comanda: o do produto ou, sem produto, a descrição gravada. */
+    public String nomeDoItem() {
+        return produto != null ? produto.getNome() : descricao;
+    }
 
     /** Preço cobrado por unidade: o gravado no pedido ou, na falta dele, o preço atual do produto. */
     public Double precoUnitarioCobrado() {

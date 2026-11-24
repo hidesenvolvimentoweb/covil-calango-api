@@ -93,6 +93,10 @@ class JwtSecurityConfigTest {
     @MockBean
     private br.com.yugiapp.service.EventoService eventoService;
     @MockBean
+    private br.com.yugiapp.service.ConfiguracaoEventoService configuracaoEventoService;
+    @MockBean
+    private br.com.yugiapp.service.ParticipacaoEventoService participacaoEventoService;
+    @MockBean
     private br.com.yugiapp.service.ComandaNotificacaoService comandaNotificacaoService;
     @MockBean
     private ParametroService parametroService;
@@ -435,5 +439,28 @@ class JwtSecurityConfigTest {
                         .cookie(cookie(List.of(ORGANIZADOR))).header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
                 .andExpect(status().isOk());
         verify(eventoService).delete(1L);
+    }
+
+    @Test
+    void clienteDoAppParticipaESaiDoEventoComAPropriaComanda() throws Exception {
+        br.com.yugiapp.model.EventoParticipante participante = br.com.yugiapp.model.EventoParticipante.builder()
+                .comanda(br.com.yugiapp.model.Comanda.builder().numero(COMANDA).status("ABERTA").build()).build();
+        when(participacaoEventoService.participar(1L, COMANDA)).thenReturn(participante);
+        when(participacaoEventoService.sair(1L, COMANDA)).thenReturn(participante);
+
+        mockMvc.perform(post("/api/evento/1/participacao").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/evento/1/participacao").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        // A comanda vem do token, nunca da requisição.
+        verify(participacaoEventoService).participar(1L, COMANDA);
+        verify(participacaoEventoService).sair(1L, COMANDA);
+
+        // Remover outro participante é só da equipe.
+        mockMvc.perform(delete("/api/evento/1/participantes/5").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/evento/1/participantes").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        verify(participacaoEventoService).getParticipantes(1L, false, COMANDA);
     }
 }

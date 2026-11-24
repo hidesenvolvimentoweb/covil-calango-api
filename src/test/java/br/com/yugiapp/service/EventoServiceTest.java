@@ -5,6 +5,7 @@ import br.com.yugiapp.dto.EventoRequestDTO;
 import br.com.yugiapp.dto.EventoResponseDTO;
 import br.com.yugiapp.enums.TipoEventoEnum;
 import br.com.yugiapp.model.Evento;
+import br.com.yugiapp.repository.EventoParticipanteRepository;
 import br.com.yugiapp.repository.EventoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,10 +15,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,14 +38,17 @@ class EventoServiceTest {
     private static final LocalDateTime INICIO = LocalDateTime.of(2026, 11, 28, 19, 0);
 
     private final EventoRepository eventoRepository = mock(EventoRepository.class);
+    private final ConfiguracaoEventoService configuracao = mock(ConfiguracaoEventoService.class);
+    private final EventoParticipanteRepository participanteRepository = mock(EventoParticipanteRepository.class);
     private EventoService service;
 
     @BeforeEach
     void configurar() {
         // 24/11 às 23:30 em Brasília = 25/11 02:30 UTC: "hoje" ainda é dia 24 no estabelecimento.
-        service = new EventoService(eventoRepository, BRASILIA,
+        service = new EventoService(eventoRepository, participanteRepository, configuracao, BRASILIA,
                 Clock.fixed(Instant.parse("2026-11-25T02:30:00Z"), ZoneOffset.UTC));
         when(eventoRepository.save(any())).thenAnswer(invocacao -> invocacao.getArgument(0));
+        when(configuracao.getDiasFechados()).thenReturn(EnumSet.of(DayOfWeek.MONDAY));
     }
 
     private static EventoRequestDTO.EventoRequestDTOBuilder torneio() {
@@ -108,6 +114,29 @@ class EventoServiceTest {
     }
 
     @Test
+    void naoCadastraEventoEmDiaQueALojaNaoAbre() {
+        // 30/11/2026 é uma segunda-feira.
+        LocalDateTime segunda = LocalDateTime.of(2026, 11, 30, 14, 0);
+        assertBadRequest(torneio().dataHoraInicio(segunda).dataHoraFim(segunda.plusHours(4)).build(),
+                "A loja não abre nesse dia (segunda-feira)");
+    }
+
+    @Test
+    void alteracaoSoValidaODiaQuandoEleMuda() {
+        LocalDateTime segunda = LocalDateTime.of(2026, 11, 30, 14, 0);
+        when(eventoRepository.findById(3L)).thenReturn(Optional.of(Evento.builder().id(3L).nome("Antigo")
+                .tipo(TipoEventoEnum.OUTROS).dataHoraInicio(segunda).dataHoraFim(segunda.plusHours(2)).build()));
+
+        // Mesmo dia (cadastrado antes de a segunda ser fechada): continua editável.
+        assertThat(service.update(3L, torneio().dataHoraInicio(segunda.plusHours(1))
+                .dataHoraFim(segunda.plusHours(5)).build()).getNome()).isEqualTo("Torneio Locals");
+        // Mudar para outra segunda não é permitido.
+        assertThatThrownBy(() -> service.update(3L, torneio().dataHoraInicio(segunda.plusDays(7))
+                .dataHoraFim(segunda.plusDays(7).plusHours(4)).build()))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void eventoInexistenteRetorna404() {
         when(eventoRepository.findById(9L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.delete(9L))
@@ -133,6 +162,8 @@ class EventoServiceTest {
     void springConsegueCriarOServico() {
         new ApplicationContextRunner()
                 .withBean(EventoRepository.class, () -> eventoRepository)
+                .withBean(ConfiguracaoEventoService.class, () -> configuracao)
+                .withBean(EventoParticipanteRepository.class, () -> participanteRepository)
                 .withUserConfiguration(EventoService.class)
                 .run(contexto -> {
                     assertThat(contexto).hasNotFailed();

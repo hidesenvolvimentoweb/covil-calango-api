@@ -13,7 +13,7 @@ public class PedidoConverter {
 
     public PedidoResponseDTO toResponseDTO(Pedido entity) {
         return PedidoResponseDTO.builder()
-                .nomeProduto(entity.getProduto().getNome())
+                .nomeProduto(entity.nomeDoItem())
                 .quantidade(entity.getQuantidade())
                 .observacao(entity.getObservacao())
                 .valorProduto(entity.precoUnitarioCobrado())

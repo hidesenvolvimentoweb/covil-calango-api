@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!--
+        Funcionamento da loja usado no cadastro de eventos (editável na tela de parâmetros):
+        - LOJA_HORA_ABERTURA: horário sugerido para o início dos eventos (HH:mm).
+        - LOJA_DIAS_FECHADOS: dias sem expediente, separados por vírgula (DOMINGO, SEGUNDA, TERCA, QUARTA, QUINTA,
+          SEXTA, SABADO); vazio = abre todos os dias. Não é possível cadastrar eventos nesses dias.
+        - EVENTO_DURACAO_PADRAO_HORAS: duração sugerida de um evento novo.
+        - EVENTO_INTERVALO_HORARIOS_MINUTOS: intervalo das opções de horário no cadastro.
+    -->
+    <changeSet id="049-insert-parametros-eventos" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_parametro (id, nome, descricao, tipo)
+            SELECT nextval('public.tb_parametro_seq'), parametro.nome, parametro.descricao, 'TEXTO'
+            FROM (VALUES
+                ('LOJA_HORA_ABERTURA', '14:00'),
+                ('LOJA_DIAS_FECHADOS', 'SEGUNDA'),
+                ('EVENTO_DURACAO_PADRAO_HORAS', '4'),
+                ('EVENTO_INTERVALO_HORARIOS_MINUTOS', '30')
+            ) AS parametro(nome, descricao)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM public.tb_parametro existente WHERE existente.nome = parametro.nome
+            )
+        </sql>
+    </changeSet>
+</databaseChangeLog>

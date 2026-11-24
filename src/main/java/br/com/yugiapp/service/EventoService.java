@@ -5,6 +5,7 @@ import br.com.yugiapp.dto.EventoRequestDTO;
 import br.com.yugiapp.dto.EventoResponseDTO;
 import br.com.yugiapp.enums.TipoEventoEnum;
 import br.com.yugiapp.model.Evento;
+import br.com.yugiapp.repository.EventoParticipanteRepository;
 import br.com.yugiapp.repository.EventoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,12 +15,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Eventos da loja. As datas são o horário local do estabelecimento (ver {@link Evento}); "hoje" também é o dia no
@@ -35,19 +39,29 @@ public class EventoService {
     /** Período máximo de uma consulta do calendário (a maior visualização é o mês, com folga para a lista). */
     static final Duration PERIODO_MAXIMO_CONSULTA = Duration.ofDays(400);
 
+    private static final Locale PT_BR = new Locale("pt", "BR");
+
     private final EventoRepository eventoRepository;
+    private final EventoParticipanteRepository participanteRepository;
+    private final ConfiguracaoEventoService configuracaoEventoService;
     private final ZoneId fusoEstabelecimento;
     private final Clock clock;
 
     /** Construtor usado pelo Spring (com dois construtores, ele precisa da indicação explícita). */
     @Autowired
-    public EventoService(EventoRepository eventoRepository,
+    public EventoService(EventoRepository eventoRepository, EventoParticipanteRepository participanteRepository,
+                         ConfiguracaoEventoService configuracaoEventoService,
                          @Value("${app.fuso-horario:America/Sao_Paulo}") String fusoHorario) {
-        this(eventoRepository, ZoneId.of(fusoHorario), Clock.systemUTC());
+        this(eventoRepository, participanteRepository, configuracaoEventoService, ZoneId.of(fusoHorario),
+                Clock.systemUTC());
     }
 
-    EventoService(EventoRepository eventoRepository, ZoneId fusoEstabelecimento, Clock clock) {
+    EventoService(EventoRepository eventoRepository, EventoParticipanteRepository participanteRepository,
+                  ConfiguracaoEventoService configuracaoEventoService,
+                  ZoneId fusoEstabelecimento, Clock clock) {
         this.eventoRepository = eventoRepository;
+        this.configuracaoEventoService = configuracaoEventoService;
+        this.participanteRepository = participanteRepository;
         this.fusoEstabelecimento = fusoEstabelecimento;
         this.clock = clock;
     }
@@ -97,6 +111,7 @@ public class EventoService {
     @Transactional
     public EventoResponseDTO create(EventoRequestDTO request) {
         Evento evento = fromRequest(request);
+        exigirLojaAberta(evento.getDataHoraInicio());
         evento.setId(null);
         return toResponse(eventoRepository.save(evento));
     }
@@ -105,19 +120,36 @@ public class EventoService {
     public EventoResponseDTO update(Long id, EventoRequestDTO request) {
         Evento evento = getById(id);
         Evento updated = fromRequest(request);
+        // Só valida o dia quando ele muda: um evento antigo em um dia que passou a ser fechado continua editável.
+        if (!updated.getDataHoraInicio().toLocalDate().equals(evento.getDataHoraInicio().toLocalDate())) {
+            exigirLojaAberta(updated.getDataHoraInicio());
+        }
         evento.setNome(updated.getNome());
         evento.setTipo(updated.getTipo());
         evento.setDescricao(updated.getDescricao());
         evento.setDataHoraInicio(updated.getDataHoraInicio());
         evento.setDataHoraFim(updated.getDataHoraFim());
         evento.setValorInscricao(updated.getValorInscricao());
+        if (updated.getVagas() != null) {
+            long participantes = participanteRepository.countByEventoId(id);
+            if (participantes > updated.getVagas()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O evento já tem " + participantes
+                        + " participantes: informe pelo menos " + participantes + " vagas");
+            }
+        }
         evento.setVagas(updated.getVagas());
         return toResponse(eventoRepository.save(evento));
     }
 
     @Transactional
     public void delete(Long id) {
-        eventoRepository.delete(getById(id));
+        Evento evento = getById(id);
+        // Os participantes têm a inscrição lançada na comanda: a equipe os remove (e acerta as comandas) antes.
+        if (participanteRepository.existsByEventoId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "O evento tem participantes. Remova os participantes antes de excluir o evento");
+        }
+        eventoRepository.delete(evento);
     }
 
     private Evento fromRequest(EventoRequestDTO request) {
@@ -165,6 +197,15 @@ public class EventoService {
                         ? null : request.getValorInscricao())
                 .vagas(request.getVagas())
                 .build();
+    }
+
+    /** Não há eventos nos dias sem expediente (parâmetro LOJA_DIAS_FECHADOS). */
+    private void exigirLojaAberta(LocalDateTime inicio) {
+        DayOfWeek dia = inicio.getDayOfWeek();
+        if (configuracaoEventoService.getDiasFechados().contains(dia)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A loja não abre nesse dia (" + dia.getDisplayName(TextStyle.FULL, PT_BR) + ")");
+        }
     }
 
     private static LocalDateTime semSegundos(LocalDateTime dataHora) {

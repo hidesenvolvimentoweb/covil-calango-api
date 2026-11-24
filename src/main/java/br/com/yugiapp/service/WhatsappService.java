@@ -114,7 +114,7 @@ public class WhatsappService {
 
     private String montarMensagemPedidoPronto(Pedido pedido) {
         return "Olá, " + pedido.getComanda().getNomeCliente() + "! 😋 Seu pedido de *" + pedido.getQuantidade()
-                + "x " + pedido.getProduto().getNome() + "* está pronto para retirada no balcão!";
+                + "x " + pedido.nomeDoItem() + "* está pronto para retirada no balcão!";
     }
 
 }

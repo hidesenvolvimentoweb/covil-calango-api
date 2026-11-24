@@ -98,6 +98,9 @@ public class JwtSecurityConfig {
                         .requestMatchers("/api/relatorio", "/api/relatorio/**").hasAnyAuthority(exigir(WEB_DASHBOARD))
 
                         // Eventos: o calendário é consultado pela equipe e pelos clientes do app; a manutenção é da equipe.
+                        // Participar e sair: o cliente do app, sempre com a própria comanda (validado no controller).
+                        .requestMatchers(HttpMethod.POST, "/api/evento/*/participacao").hasAnyAuthority(exigir(APP_EVENTOS))
+                        .requestMatchers(HttpMethod.DELETE, "/api/evento/*/participacao").hasAnyAuthority(exigir(APP_EVENTOS))
                         .requestMatchers(HttpMethod.GET, "/api/evento", "/api/evento/**").hasAnyAuthority(exigir(APP_EVENTOS, WEB_EVENTOS))
                         .requestMatchers("/api/evento", "/api/evento/**").hasAnyAuthority(exigir(WEB_EVENTOS))
 

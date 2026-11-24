@@ -22,4 +22,8 @@ public class EventoResponseDTO {
     private LocalDateTime dataHoraFim;
     private Double valorInscricao;
     private Integer vagas;
+    /** Inscrições feitas pelo app. */
+    private Long totalParticipantes;
+    /** A comanda de quem consulta (app) está inscrita; nulo para a equipe. */
+    private Boolean participando;
 }
