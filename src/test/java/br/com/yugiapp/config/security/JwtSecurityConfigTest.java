@@ -47,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -60,6 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest
 @ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
         PedidoController.class, PagamentoController.class, br.com.yugiapp.controller.RelatorioController.class,
+        br.com.yugiapp.controller.EventoController.class,
         GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
         AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class,
         LimiteTentativasService.class})
@@ -71,13 +73,15 @@ class JwtSecurityConfigTest {
 
     private static final String ADMIN = Permissoes.PERFIL_ADMINISTRADOR;
     private static final String ATENDENTE = "ROLE_ATENDENTE";
+    private static final String ORGANIZADOR = "ROLE_ORGANIZADOR";
     private static final String COMANDA = "202615-10";
 
     /** Permissões de cada perfil, como estariam cadastradas na tela de Perfis. */
     private static final Map<String, List<String>> PERMISSOES_POR_PERFIL = Map.of(
             Permissoes.PERFIL_VISITANTE, List.of(Permissoes.APP_CARDAPIO, Permissoes.APP_MEUS_PEDIDOS,
-                    Permissoes.APP_MINHA_COMANDA, Permissoes.APP_MEU_PERFIL),
-            ATENDENTE, List.of(Permissoes.WEB_COMANDAS, Permissoes.WEB_MANTER_PRODUTOS));
+                    Permissoes.APP_MINHA_COMANDA, Permissoes.APP_MEU_PERFIL, Permissoes.APP_EVENTOS),
+            ATENDENTE, List.of(Permissoes.WEB_COMANDAS, Permissoes.WEB_MANTER_PRODUTOS),
+            ORGANIZADOR, List.of(Permissoes.WEB_EVENTOS));
 
     @Autowired
     private MockMvc mockMvc;
@@ -86,6 +90,8 @@ class JwtSecurityConfigTest {
 
     @MockBean
     private br.com.yugiapp.service.RelatorioService relatorioService;
+    @MockBean
+    private br.com.yugiapp.service.EventoService eventoService;
     @MockBean
     private br.com.yugiapp.service.ComandaNotificacaoService comandaNotificacaoService;
     @MockBean
@@ -393,5 +399,41 @@ class JwtSecurityConfigTest {
         mockMvc.perform(post("/api/auth/login").contentType("application/json").content("{}")
                         .with(requisicao -> { requisicao.setRemoteAddr("10.9.9.10"); return requisicao; }))
                 .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(429));
+    }
+
+    @Test
+    void clienteDoAppConsultaOsEventosMasNaoAltera() throws Exception {
+        mockMvc.perform(get("/api/evento/hoje").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/evento").param("inicio", "2026-11-01T00:00:00").param("fim", "2026-12-01T00:00:00")
+                        .header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/evento").contentType("application/json").content("{}")
+                        .header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/evento/1").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/evento/hoje")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void manutencaoDosEventosExigeWebEventos() throws Exception {
+        // O atendente (sem web-eventos) não vê nem altera o calendário.
+        mockMvc.perform(get("/api/evento/hoje").cookie(cookie(List.of(ATENDENTE))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/evento").contentType("application/json").content("{}")
+                        .cookie(cookie(List.of(ATENDENTE))).header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/evento").contentType("application/json").content("{}")
+                        .cookie(cookie(List.of(ORGANIZADOR))).header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/evento/1").contentType("application/json").content("{}")
+                        .cookie(cookie(List.of(ORGANIZADOR))).header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/evento/1")
+                        .cookie(cookie(List.of(ORGANIZADOR))).header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+        verify(eventoService).delete(1L);
     }
 }

@@ -97,6 +97,10 @@ public class JwtSecurityConfig {
 
                         .requestMatchers("/api/relatorio", "/api/relatorio/**").hasAnyAuthority(exigir(WEB_DASHBOARD))
 
+                        // Eventos: o calendário é consultado pela equipe e pelos clientes do app; a manutenção é da equipe.
+                        .requestMatchers(HttpMethod.GET, "/api/evento", "/api/evento/**").hasAnyAuthority(exigir(APP_EVENTOS, WEB_EVENTOS))
+                        .requestMatchers("/api/evento", "/api/evento/**").hasAnyAuthority(exigir(WEB_EVENTOS))
+
                         .requestMatchers("/api/usuario", "/api/usuario/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
                         .requestMatchers("/api/perfil", "/api/perfil/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))
                         .requestMatchers("/api/permissao", "/api/permissao/**").hasAnyAuthority(exigir(WEB_MANTER_USUARIOS))

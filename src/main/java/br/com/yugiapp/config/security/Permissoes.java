@@ -13,6 +13,7 @@ public final class Permissoes {
     public static final String APP_MEUS_PEDIDOS = "app-meus-pedidos";
     public static final String APP_MINHA_COMANDA = "app-minha-comanda";
     public static final String APP_MEU_PERFIL = "app-meu-perfil";
+    public static final String APP_EVENTOS = "app-eventos";
 
     public static final String WEB_DASHBOARD = "web-dashboard";
     public static final String WEB_SOLICITACOES = "web-solicitacoes";
@@ -20,6 +21,7 @@ public final class Permissoes {
     public static final String WEB_COMANDAS = "web-comandas";
     public static final String WEB_MANTER_PRODUTOS = "web-manter-produtos";
     public static final String WEB_MANTER_USUARIOS = "web-manter-usuarios";
+    public static final String WEB_EVENTOS = "web-eventos";
 
     /** Perfis com acesso total, mesmo que suas permissões sejam alteradas (evita perder o acesso administrativo). */
     public static final String PERFIL_ADMINISTRADOR = "ROLE_ADMINISTRADOR";
