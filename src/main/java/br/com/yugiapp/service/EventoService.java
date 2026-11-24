@@ -116,6 +116,7 @@ public class EventoService {
     @Transactional
     public EventoResponseDTO create(EventoRequestDTO request) {
         Evento evento = fromRequest(request);
+        exigirQueNaoTerminou(evento.getDataHoraFim(), "Não é possível cadastrar um evento que já terminou");
         exigirLojaAberta(evento.getDataHoraInicio());
         evento.setId(null);
         return toResponse(eventoRepository.save(evento));
@@ -125,6 +126,9 @@ public class EventoService {
     public EventoResponseDTO update(Long id, EventoRequestDTO request) {
         Evento evento = getById(id);
         Evento updated = fromRequest(request);
+        // Evento encerrado fica como registro do que aconteceu (participantes e inscrições cobradas).
+        exigirQueNaoTerminou(evento.getDataHoraFim(), "O evento já terminou e não pode ser alterado");
+        exigirQueNaoTerminou(updated.getDataHoraFim(), "O fim do evento não pode estar no passado");
         // Só valida o dia quando ele muda: um evento antigo em um dia que passou a ser fechado continua editável.
         if (!updated.getDataHoraInicio().toLocalDate().equals(evento.getDataHoraInicio().toLocalDate())) {
             // Os inscritos pagaram a inscrição na comanda daquele dia: mudar o dia os deixaria cobrados por um evento
@@ -213,6 +217,13 @@ public class EventoService {
                         ? null : request.getValorInscricao())
                 .vagas(request.getVagas())
                 .build();
+    }
+
+    /** Eventos que já terminaram não são cadastrados nem alterados. */
+    private void exigirQueNaoTerminou(LocalDateTime fim, String mensagem) {
+        if (!fim.isAfter(agora())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, mensagem);
+        }
     }
 
     /** Não há eventos nos dias sem expediente (parâmetro LOJA_DIAS_FECHADOS). */

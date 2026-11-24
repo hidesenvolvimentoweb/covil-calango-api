@@ -137,6 +137,30 @@ class EventoServiceTest {
     }
 
     @Test
+    void eventoQueJaTerminouNaoEhCadastradoNemAlterado() {
+        // "Agora" é 24/11 às 23:30.
+        LocalDateTime hoje = LocalDateTime.of(2026, 11, 24, 19, 0);
+        assertBadRequest(torneio().dataHoraInicio(hoje).dataHoraFim(hoje.plusHours(4)).build(),
+                "Não é possível cadastrar um evento que já terminou");
+        // Em andamento (termina depois de agora) ainda pode ser cadastrado.
+        assertThat(service.create(torneio().dataHoraInicio(hoje).dataHoraFim(hoje.plusHours(5)).build()))
+                .isNotNull();
+
+        when(eventoRepository.findById(4L)).thenReturn(Optional.of(Evento.builder().id(4L).nome("Encerrado")
+                .tipo(TipoEventoEnum.OUTROS).dataHoraInicio(hoje).dataHoraFim(hoje.plusHours(4)).build()));
+        assertThatThrownBy(() -> service.update(4L, torneio().build()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, erro -> assertThat(erro.getReason())
+                        .isEqualTo("O evento já terminou e não pode ser alterado"));
+
+        when(eventoRepository.findById(5L)).thenReturn(Optional.of(Evento.builder().id(5L).nome("Futuro")
+                .tipo(TipoEventoEnum.OUTROS).dataHoraInicio(INICIO).dataHoraFim(INICIO.plusHours(4)).build()));
+        assertThatThrownBy(() -> service.update(5L, torneio().dataHoraInicio(hoje).dataHoraFim(hoje.plusHours(1))
+                .build()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, erro -> assertThat(erro.getReason())
+                        .isEqualTo("O fim do evento não pode estar no passado"));
+    }
+
+    @Test
     void comParticipantesOHorarioMudaMasODiaNao() {
         when(eventoRepository.findById(7L)).thenReturn(Optional.of(Evento.builder().id(7L).nome("Locals")
                 .tipo(TipoEventoEnum.TORNEIO).dataHoraInicio(INICIO).dataHoraFim(INICIO.plusHours(4)).build()));
