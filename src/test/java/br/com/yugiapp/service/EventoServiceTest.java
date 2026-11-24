@@ -137,6 +137,38 @@ class EventoServiceTest {
     }
 
     @Test
+    void comParticipantesOHorarioMudaMasODiaNao() {
+        when(eventoRepository.findById(7L)).thenReturn(Optional.of(Evento.builder().id(7L).nome("Locals")
+                .tipo(TipoEventoEnum.TORNEIO).dataHoraInicio(INICIO).dataHoraFim(INICIO.plusHours(4)).build()));
+        when(participanteRepository.existsByEventoId(7L)).thenReturn(true);
+
+        assertThat(service.update(7L, torneio().dataHoraInicio(INICIO.plusHours(1)).build()).getDataHoraInicio())
+                .isEqualTo(INICIO.plusHours(1));
+        assertThatThrownBy(() -> service.update(7L, torneio().dataHoraInicio(INICIO.plusDays(1))
+                .dataHoraFim(INICIO.plusDays(1).plusHours(4)).build()))
+                .isInstanceOfSatisfying(ResponseStatusException.class, erro -> assertThat(erro.getReason())
+                        .isEqualTo("O evento tem participantes. Remova os participantes antes de mudar o dia do evento"));
+    }
+
+    @Test
+    void exclusaoComParticipantesSoNoEventoEncerrado() {
+        // "Agora" é 24/11 às 23:30: o evento de amanhã ainda não terminou; o de ontem, sim.
+        when(participanteRepository.existsByEventoId(any())).thenReturn(true);
+        when(eventoRepository.findById(1L)).thenReturn(Optional.of(Evento.builder().id(1L).dataHoraInicio(INICIO)
+                .dataHoraFim(INICIO.plusHours(4)).build()));
+        assertThatThrownBy(() -> service.delete(1L)).isInstanceOfSatisfying(ResponseStatusException.class,
+                erro -> assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(eventoRepository, never()).delete(any());
+
+        LocalDateTime ontem = LocalDateTime.of(2026, 11, 23, 19, 0);
+        Evento encerrado = Evento.builder().id(2L).dataHoraInicio(ontem).dataHoraFim(ontem.plusHours(4)).build();
+        when(eventoRepository.findById(2L)).thenReturn(Optional.of(encerrado));
+        service.delete(2L);
+        verify(participanteRepository).deleteByEventoId(2L);
+        verify(eventoRepository).delete(encerrado);
+    }
+
+    @Test
     void eventoInexistenteRetorna404() {
         when(eventoRepository.findById(9L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.delete(9L))

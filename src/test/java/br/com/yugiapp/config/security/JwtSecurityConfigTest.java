@@ -457,6 +457,8 @@ class JwtSecurityConfigTest {
         verify(participacaoEventoService).sair(1L, COMANDA);
 
         // Remover outro participante é só da equipe.
+        mockMvc.perform(delete("/api/evento/1/participantes").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
         mockMvc.perform(delete("/api/evento/1/participantes/5").header("Authorization", bearerVisitante(COMANDA)))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/evento/1/participantes").header("Authorization", bearerVisitante(COMANDA)))

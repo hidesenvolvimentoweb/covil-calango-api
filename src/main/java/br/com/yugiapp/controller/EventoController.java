@@ -113,6 +113,12 @@ public class EventoController {
         notificar(participacaoEventoService.removerParticipante(id, participanteId), true);
     }
 
+    /** A equipe remove todos os participantes (ex.: antes de excluir o evento), com as mesmas regras de um só. */
+    @DeleteMapping(path = "{id}/participantes")
+    public void removerTodos(@PathVariable Long id) {
+        participacaoEventoService.removerTodos(id).forEach(participante -> notificar(participante, true));
+    }
+
     private String comandaDoVisitante() {
         return acessoService.comandaDoVisitante().orElse(null);
     }

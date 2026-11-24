@@ -2,10 +2,12 @@ package br.com.yugiapp.model;
 
 import br.com.yugiapp.enums.FormaPagamentoEnum;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.io.Serializable;
@@ -28,6 +30,9 @@ public class Comanda implements Serializable {
     @Column(name = "NUMERO")
     private String numero;
 
+    /** Nulo nas comandas de visitante (o nome fica em {@link #nomeCliente}); no JSON, ver {@link #getUsuarioExibido()}. */
+    @JsonIgnore
+    @Getter(onMethod_ = @JsonIgnore)
     @ManyToOne
     @JoinColumn(name = "FK_USUARIO")
     private Usuario usuario;
@@ -62,5 +67,20 @@ public class Comanda implements Serializable {
     @JsonIgnore
     @Column(name = "NOTIFICAR_WHATSAPP", nullable = false)
     private boolean notificarWhatsapp;
+
+    /**
+     * "usuario" no JSON (tópicos do WebSocket, solicitação aceita): o app exibe usuario.nome ("Olá, Fulano!"). As
+     * comandas de visitante não têm usuário e as antigas apontam para o genérico "Visitante", por isso o nome
+     * informado na comanda tem prioridade.
+     */
+    @JsonProperty("usuario")
+    public Usuario getUsuarioExibido() {
+        String nome = nomeCliente != null && !nomeCliente.isBlank() ? nomeCliente
+                : usuario == null ? null : usuario.getNome();
+        if (nome == null) {
+            return null;
+        }
+        return Usuario.builder().id(usuario == null ? null : usuario.getId()).nome(nome).build();
+    }
 
 }

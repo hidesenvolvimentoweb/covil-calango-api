@@ -58,6 +58,7 @@ class ParticipacaoEventoServiceTest {
         comanda = Comanda.builder().id(3L).numero(COMANDA).nomeCliente("Yugi")
                 .status(StatusComandaEnum.ABERTA.getValue()).build();
         when(comandaService.findByNumero(COMANDA)).thenReturn(Optional.of(comanda));
+        when(comandaService.travarParaAtualizacao(COMANDA)).thenReturn(comanda);
         when(participanteRepository.findByEventoIdAndComandaNumero(any(), any())).thenReturn(Optional.empty());
         when(participanteRepository.save(any())).thenAnswer(invocacao -> invocacao.getArgument(0));
         when(pedidoRepository.save(any())).thenAnswer(invocacao -> invocacao.getArgument(0));
@@ -167,6 +168,39 @@ class ParticipacaoEventoServiceTest {
     }
 
     @Test
+    void removerTodosAcertaAsComandasAbertasEMantemAsFechadas() {
+        evento(HOJE_14H, HOJE_14H.plusHours(6), 25.0, null);
+        Comanda fechada = Comanda.builder().numero("20261124-2").status(StatusComandaEnum.FECHADA.getValue()).build();
+        when(comandaService.travarParaAtualizacao("20261124-2")).thenReturn(fechada);
+        Pedido pedidoAberta = Pedido.builder().id(9L).comanda(comanda).build();
+        Pedido pedidoFechada = Pedido.builder().id(10L).comanda(fechada).build();
+        EventoParticipante daAberta = EventoParticipante.builder().id(4L).comanda(comanda).pedido(pedidoAberta).build();
+        EventoParticipante daFechada = EventoParticipante.builder().id(5L).comanda(fechada).pedido(pedidoFechada).build();
+        when(participanteRepository.findByEventoIdOrderByDataHoraInscricaoAscIdAsc(1L)).thenReturn(List.of(daAberta, daFechada));
+
+        assertThat(service.removerTodos(1L)).containsExactly(daAberta, daFechada);
+
+        verify(participanteRepository).delete(daAberta);
+        verify(participanteRepository).delete(daFechada);
+        // Só a inscrição da comanda aberta sai do valor; a da fechada já foi paga.
+        verify(pedidoRepository).delete(pedidoAberta);
+        verify(pedidoRepository, never()).delete(pedidoFechada);
+    }
+
+    @Test
+    void removerTodosNaoRemoveNadaSeUmaComandaTiverPixPendente() {
+        evento(HOJE_14H, HOJE_14H.plusHours(6), 25.0, null);
+        EventoParticipante participante = EventoParticipante.builder().id(4L).comanda(comanda)
+                .pedido(Pedido.builder().id(9L).comanda(comanda).build()).build();
+        when(participanteRepository.findByEventoIdOrderByDataHoraInscricaoAscIdAsc(1L)).thenReturn(List.of(participante));
+        when(pagamentoRepository.existsByComandaNumeroAndStatus(COMANDA, StatusPagamentoEnum.PENDENTE)).thenReturn(true);
+
+        // A exceção desfaz a transação inteira (nenhum participante removido).
+        assertConflito(() -> service.removerTodos(1L), "Há um pagamento PIX em andamento para a comanda " + COMANDA
+                + ". Cancele o pagamento antes de remover a inscrição do evento");
+    }
+
+    @Test
     void listaOsParticipantesSemExporAComandaParaOApp() {
         when(eventoRepository.existsById(1L)).thenReturn(true);
         Comanda outra = Comanda.builder().numero("20261124-8").nomeCliente("Kaiba").build();
@@ -202,6 +236,8 @@ class ParticipacaoEventoServiceTest {
                 .withBean(EventoRepository.class, () -> eventoRepository)
                 .withBean(EventoParticipanteRepository.class, () -> participanteRepository)
                 .withBean(ComandaService.class, () -> comandaService)
+                // O ComandaService recebe o EntityManager por @PersistenceContext.
+                .withBean(jakarta.persistence.EntityManagerFactory.class, () -> mock(jakarta.persistence.EntityManagerFactory.class))
                 .withBean(PedidoRepository.class, () -> pedidoRepository)
                 .withBean(PagamentoRepository.class, () -> pagamentoRepository)
                 .withUserConfiguration(ParticipacaoEventoService.class)

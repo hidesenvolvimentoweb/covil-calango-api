@@ -95,6 +95,8 @@ public class RelatorioService {
 
         List<Pedido> pedidosDoDia = pedidoRepository.findDoPeriodo(inicio, fim);
         List<Pedido> vendidos = pedidosDoDia.stream().filter(RelatorioService::cobrado).toList();
+        // Contagens de pedidos (cozinha): sem as inscrições em eventos, que só entram nos valores.
+        List<Pedido> pedidosDaCozinha = pedidosDoDia.stream().filter(p -> !p.inscricaoEmEvento()).toList();
         List<Comanda> entradas = comandaRepository.findEntradasNoPeriodo(inicio, fim);
 
         BigDecimal arrecadado = soma(fechadasNoDia.stream().map(c -> valorPorComanda.get(c.getId())));
@@ -108,11 +110,11 @@ public class RelatorioService {
                 fechadasNoDia.size(),
                 entradas.size(),
                 permanenciaMedia(fechadasNoDia),
-                pedidosDoDia.size(),
-                pedidosDoDia.stream().filter(p -> p.getStatus() == StatusPedidoEnum.FINALIZADO).count(),
-                pedidosDoDia.stream().filter(p -> p.getStatus() == StatusPedidoEnum.CANCELADO).count(),
+                pedidosDaCozinha.size(),
+                pedidosDaCozinha.stream().filter(p -> p.getStatus() == StatusPedidoEnum.FINALIZADO).count(),
+                pedidosDaCozinha.stream().filter(p -> p.getStatus() == StatusPedidoEnum.CANCELADO).count(),
                 vendidos.stream().mapToLong(RelatorioService::quantidade).sum(),
-                pedidosPorStatus(pedidosDoDia),
+                pedidosPorStatus(pedidosDaCozinha),
                 produtos(vendidos),
                 categorias(vendidos),
                 formasPagamento(fechadasNoDia, valorPorComanda),

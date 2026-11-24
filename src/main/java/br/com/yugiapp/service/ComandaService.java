@@ -13,6 +13,8 @@ import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.repository.ComandaRepository;
 import br.com.yugiapp.specs.ComandaSpecifications;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -43,6 +45,10 @@ public class ComandaService {
     private final UsuarioService usuarioService;
     private final PedidoService pedidoService;
     private final PagamentoRepository pagamentoRepository;
+
+    /** Fora do construtor por causa do @Lazy (como o fuso). */
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private static final String FUSO_PADRAO = "America/Sao_Paulo";
     /** Fuso do estabelecimento, o mesmo dos relatórios (app.fuso-horario). Fora do construtor por causa do @Lazy. */
@@ -83,6 +89,21 @@ public class ComandaService {
 
     public Optional<Comanda> findByNumero(String numero) {
         return comandaRepository.findByNumero(numero);
+    }
+
+    /**
+     * Comanda bloqueada até o fim da transação. O fechamento e a geração do PIX também bloqueiam a comanda: um
+     * pedido ou uma inscrição em evento nunca entra numa comanda que está sendo fechada ou cobrada ao mesmo tempo.
+     */
+    public Comanda travarParaAtualizacao(String numero) {
+        Comanda comanda = comandaRepository.findByNumeroParaAtualizacao(numero)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Comanda não encontrada"));
+        // Se a comanda já estava carregada na transação, a consulta com bloqueio devolve a cópia em memória:
+        // relê do banco para decidir com o status atual (ex.: fechada no instante anterior ao bloqueio).
+        if (entityManager != null) {
+            entityManager.refresh(comanda);
+        }
+        return comanda;
     }
 
     public ComandaResponseDTO getResponseDTOByNumero(String numero) {

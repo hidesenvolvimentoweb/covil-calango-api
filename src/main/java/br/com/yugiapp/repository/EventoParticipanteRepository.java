@@ -36,4 +36,9 @@ public interface EventoParticipanteRepository extends JpaRepository<EventoPartic
     @Modifying
     @Query("delete from EventoParticipante p where p.pedido.id = :pedido")
     int deleteByPedidoId(@Param("pedido") Long pedidoId);
+
+    /** Excluir um evento já encerrado apaga as participações (as inscrições cobradas continuam nas comandas). */
+    @Modifying
+    @Query("delete from EventoParticipante p where p.evento.id = :evento")
+    int deleteByEventoId(@Param("evento") Long eventoId);
 }

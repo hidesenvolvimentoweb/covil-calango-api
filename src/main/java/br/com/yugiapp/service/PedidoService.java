@@ -95,7 +95,7 @@ public class PedidoService {
     @Transactional
     public Pedido save(PedidoRequestDTO pedidoRequestDTO) {
         validar(pedidoRequestDTO);
-        Comanda comanda = comandaService.getByNumero(pedidoRequestDTO.getComanda());
+        Comanda comanda = comandaService.travarParaAtualizacao(pedidoRequestDTO.getComanda());
         if (StatusComandaEnum.FECHADA.getValue().equals(comanda.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Sua comanda foi finalizada. Gere uma nova comanda para fazer pedidos");
         }

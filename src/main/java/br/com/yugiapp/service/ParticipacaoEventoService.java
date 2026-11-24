@@ -24,6 +24,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -116,7 +117,7 @@ public class ParticipacaoEventoService {
     public EventoParticipante sair(Long eventoId, String numeroComanda) {
         EventoParticipante participante = participanteRepository.findByEventoIdAndComandaNumero(eventoId, numeroComanda)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Você não está participando deste evento"));
-        if (comandaFechada(participante.getComanda())) {
+        if (comandaFechada(comandaService.travarParaAtualizacao(numeroComanda))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Sua comanda foi finalizada");
         }
         remover(participante);
@@ -131,12 +132,36 @@ public class ParticipacaoEventoService {
     public EventoParticipante removerParticipante(Long eventoId, Long participanteId) {
         EventoParticipante participante = participanteRepository.findByIdAndEventoId(participanteId, eventoId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participante não encontrado"));
-        if (comandaFechada(participante.getComanda())) {
+        removerPelaEquipe(participante);
+        return participante;
+    }
+
+    /**
+     * A equipe remove todos os participantes (ex.: para excluir o evento), com as mesmas regras da remoção de um. Se
+     * alguma comanda aberta tiver PIX pendente, nada é removido e a mensagem indica a comanda.
+     */
+    @Transactional
+    public List<EventoParticipante> removerTodos(Long eventoId) {
+        eventoRepository.findByIdParaAtualizacao(eventoId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Evento não encontrado"));
+        List<EventoParticipante> participantes = participanteRepository.findByEventoIdOrderByDataHoraInscricaoAscIdAsc(eventoId);
+        // Bloqueia as comandas sempre na mesma ordem (número), para que duas remoções não se travem mutuamente.
+        participantes.stream()
+                .sorted(Comparator.comparing(participante -> participante.getComanda().getNumero()))
+                .forEach(this::removerPelaEquipe);
+        return participantes;
+    }
+
+    /**
+     * Com a comanda aberta, o valor da inscrição sai dela; com a comanda já fechada (e paga), só a participação é
+     * removida e o valor cobrado continua no histórico.
+     */
+    private void removerPelaEquipe(EventoParticipante participante) {
+        if (comandaFechada(comandaService.travarParaAtualizacao(participante.getComanda().getNumero()))) {
             participanteRepository.delete(participante);
         } else {
             remover(participante);
         }
-        return participante;
     }
 
     @Transactional(readOnly = true)
@@ -185,7 +210,7 @@ public class ParticipacaoEventoService {
         if (pedido != null && pagamentoRepository.existsByComandaNumeroAndStatus(
                 participante.getComanda().getNumero(), StatusPagamentoEnum.PENDENTE)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento PIX em andamento para a comanda "
-                    + participante.getComanda().getNumero() + ". Cancele o pagamento antes de sair do evento");
+                    + participante.getComanda().getNumero() + ". Cancele o pagamento antes de remover a inscrição do evento");
         }
         participanteRepository.delete(participante);
         if (pedido != null) {
@@ -194,8 +219,12 @@ public class ParticipacaoEventoService {
         }
     }
 
+    /** Comanda bloqueada: o fechamento e a geração do PIX esperam a inscrição terminar (e vice-versa). */
     private Comanda comandaAberta(String numeroComanda) {
-        Comanda comanda = numeroComanda == null ? null : comandaService.findByNumero(numeroComanda).orElse(null);
+        Comanda comanda = null;
+        if (numeroComanda != null && comandaService.findByNumero(numeroComanda).isPresent()) {
+            comanda = comandaService.travarParaAtualizacao(numeroComanda);
+        }
         if (comanda == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Gere uma comanda para participar dos eventos");
         }

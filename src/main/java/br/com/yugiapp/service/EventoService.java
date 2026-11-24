@@ -97,6 +97,11 @@ public class EventoService {
         return LocalDate.now(clock.withZone(fusoEstabelecimento));
     }
 
+    /** Agora no fuso do estabelecimento (as datas dos eventos são o horário local da loja). */
+    LocalDateTime agora() {
+        return LocalDateTime.now(clock.withZone(fusoEstabelecimento));
+    }
+
     @Transactional(readOnly = true)
     public Evento getById(Long id) {
         return eventoRepository.findById(id)
@@ -122,6 +127,12 @@ public class EventoService {
         Evento updated = fromRequest(request);
         // Só valida o dia quando ele muda: um evento antigo em um dia que passou a ser fechado continua editável.
         if (!updated.getDataHoraInicio().toLocalDate().equals(evento.getDataHoraInicio().toLocalDate())) {
+            // Os inscritos pagaram a inscrição na comanda daquele dia: mudar o dia os deixaria cobrados por um evento
+            // de outra data. O horário dentro do mesmo dia pode mudar.
+            if (participanteRepository.existsByEventoId(id)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "O evento tem participantes. Remova os participantes antes de mudar o dia do evento");
+            }
             exigirLojaAberta(updated.getDataHoraInicio());
         }
         evento.setNome(updated.getNome());
@@ -144,10 +155,15 @@ public class EventoService {
     @Transactional
     public void delete(Long id) {
         Evento evento = getById(id);
-        // Os participantes têm a inscrição lançada na comanda: a equipe os remove (e acerta as comandas) antes.
         if (participanteRepository.existsByEventoId(id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "O evento tem participantes. Remova os participantes antes de excluir o evento");
+            // Evento que ainda não terminou: os inscritos têm a inscrição na comanda; a equipe os remove antes
+            // (o que acerta as comandas abertas).
+            if (evento.getDataHoraFim().isAfter(agora())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "O evento tem participantes. Use \"Remover todos\" antes de excluir o evento");
+            }
+            // Evento encerrado: os clientes participaram e as inscrições cobradas continuam nas comandas.
+            participanteRepository.deleteByEventoId(id);
         }
         eventoRepository.delete(evento);
     }

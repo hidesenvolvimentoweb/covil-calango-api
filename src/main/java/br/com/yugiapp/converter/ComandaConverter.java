@@ -15,9 +15,9 @@ public class ComandaConverter {
 
     public ComandaResponseDTO toResponseDTO(Comanda entity) {
         return ComandaResponseDTO.builder()
-                // Comandas de visitante não têm usuário (o nome vai em nomeCliente); as antigas apontam para o "Visitante".
-                .usuario(entity.getUsuario() == null ? null
-                        : UsuarioConvidadoResponseDTO.builder().nome(entity.getUsuario().getNome()).build())
+                // Comandas de visitante não têm usuário: o nome vai em nomeCliente. O app exibe usuario.nome
+                // ("Olá, Fulano!"), por isso o nome do cliente também segue nesse campo.
+                .usuario(usuarioDaComanda(entity))
                 .nomeCliente(entity.getNomeCliente())
                 .numero(entity.getNumero())
                 .dataHoraEntrada(entity.getDataHoraEntrada())
@@ -25,5 +25,13 @@ public class ComandaConverter {
                 .status(entity.getStatus())
                 .formaPagamento(entity.getFormaPagamento())
                 .valorTotal(comandaService.obterValorTotalDaComanda(entity)).build();
+    }
+
+    /** O nome informado na comanda tem prioridade: as comandas antigas apontam para o usuário genérico "Visitante". */
+    private static UsuarioConvidadoResponseDTO usuarioDaComanda(Comanda entity) {
+        String nome = entity.getNomeCliente() != null && !entity.getNomeCliente().isBlank()
+                ? entity.getNomeCliente()
+                : entity.getUsuario() == null ? null : entity.getUsuario().getNome();
+        return nome == null ? null : UsuarioConvidadoResponseDTO.builder().nome(nome).build();
     }
 }

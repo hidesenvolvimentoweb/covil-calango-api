@@ -48,7 +48,7 @@ class PedidoServiceTest {
         service = new PedidoService(pedidoRepository, produtoRepository, comandaService,
                 mock(PedidoSpecifications.class), mock(PedidoConverter.class), pagamentoRepository,
                 mock(br.com.yugiapp.repository.EventoParticipanteRepository.class));
-        when(comandaService.getByNumero(COMANDA)).thenReturn(Comanda.builder().numero(COMANDA)
+        when(comandaService.travarParaAtualizacao(COMANDA)).thenReturn(Comanda.builder().numero(COMANDA)
                 .status(StatusComandaEnum.ABERTA.getValue()).build());
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(Produto.builder().id(1L).valor(10.0).build()));
         when(pedidoRepository.save(any())).thenAnswer(invocacao -> invocacao.getArgument(0));
