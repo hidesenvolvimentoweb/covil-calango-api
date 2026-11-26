@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!--
+        Pacotes deixados na loja pelo app para outra pessoa retirar. A taxa do pacote entra na comanda de quem deixou
+        como um pedido sem produto ("Pacote ABC123"); a retirada é registrada pela equipe no web, com o código e a foto
+        do item entregue.
+    -->
+    <changeSet id="052-create-tb-pacote" author="covil-calango">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="tb_pacote"/>
+            </not>
+        </preConditions>
+        <createTable schemaName="public" tableName="tb_pacote">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_tb_pacote" nullable="false"/>
+            </column>
+            <column name="codigo" type="VARCHAR(12)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_pacote_codigo"/>
+            </column>
+            <column name="categoria" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="descricao" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="destinatario" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fk_comanda" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_pacote_comanda"
+                             referencedTableSchemaName="public" referencedTableName="tb_comanda" referencedColumnNames="id"/>
+            </column>
+            <!-- Pedido com a taxa; nulo se a taxa for zero ou se o pedido foi excluído da comanda. -->
+            <column name="fk_pedido" type="BIGINT">
+                <constraints foreignKeyName="fk_pacote_pedido"
+                             referencedTableSchemaName="public" referencedTableName="tb_pedido" referencedColumnNames="id"/>
+            </column>
+            <column name="foto_deposito" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="foto_retirada" type="VARCHAR(255)"/>
+            <column name="dt_hora_deposito" type="TIMESTAMP WITHOUT TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="dt_hora_retirada" type="TIMESTAMP WITHOUT TIME ZONE"/>
+            <column name="retirado_por" type="VARCHAR(255)"/>
+            <column name="dt_hora_cancelamento" type="TIMESTAMP WITHOUT TIME ZONE"/>
+        </createTable>
+        <createIndex schemaName="public" tableName="tb_pacote" indexName="ix_pacote_comanda">
+            <column name="fk_comanda"/>
+        </createIndex>
+        <createIndex schemaName="public" tableName="tb_pacote" indexName="ix_pacote_status_deposito">
+            <column name="status"/>
+            <column name="dt_hora_deposito"/>
+        </createIndex>
+        <createIndex schemaName="public" tableName="tb_pacote" indexName="ix_pacote_pedido">
+            <column name="fk_pedido"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- app-pacotes (deixar e acompanhar, no app) para o visitante; web-pacotes (retirada, no web) para o administrador. -->
+    <changeSet id="053-insert-permissoes-pacotes" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_permissao (name)
+            SELECT permissao.name
+            FROM (VALUES ('app-pacotes'), ('web-pacotes')) AS permissao(name)
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM public.tb_permissao existente
+                WHERE existente.name = permissao.name
+            )
+        </sql>
+        <sql>
+            INSERT INTO public.tb_perfil_permissao (id_perfil, id_permissao)
+            SELECT perfil.id, permissao.id
+            FROM public.tb_perfil perfil
+            JOIN public.tb_permissao permissao
+              ON (perfil.name = 'ROLE_VISITANTE' AND permissao.name = 'app-pacotes')
+              OR (perfil.name = 'ROLE_ADMINISTRADOR' AND permissao.name = 'web-pacotes')
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM public.tb_perfil_permissao existente
+                WHERE existente.id_perfil = perfil.id
+                  AND existente.id_permissao = permissao.id
+            )
+        </sql>
+    </changeSet>
+
+    <!-- PACOTE_VALOR: taxa cobrada na comanda por pacote deixado (em reais; 0 = gratuito). -->
+    <changeSet id="054-insert-parametro-pacote-valor" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_parametro (id, nome, descricao, tipo)
+            SELECT nextval('public.tb_parametro_seq'), 'PACOTE_VALOR', '0.50', 'TEXTO'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM public.tb_parametro existente WHERE existente.nome = 'PACOTE_VALOR'
+            )
+        </sql>
+    </changeSet>
+</databaseChangeLog>

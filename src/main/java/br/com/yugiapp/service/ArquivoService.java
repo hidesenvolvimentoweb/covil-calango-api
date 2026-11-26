@@ -30,6 +30,7 @@ public class ArquivoService {
     public static final String URL_PREFIX = "/api/arquivos/";
     public static final String PASTA_PRODUTOS = "produtos";
     public static final String PASTA_PARAMETROS = "parametros";
+    public static final String PASTA_PACOTES = "pacotes";
 
     private static final long TAMANHO_MAXIMO_IMAGEM = 5L * 1024 * 1024;
 
@@ -43,6 +44,7 @@ public class ArquivoService {
     void criarDiretorios() throws IOException {
         Files.createDirectories(raiz.resolve(PASTA_PRODUTOS));
         Files.createDirectories(raiz.resolve(PASTA_PARAMETROS));
+        Files.createDirectories(raiz.resolve(PASTA_PACOTES));
         log.info("Diretório de uploads: {}", raiz);
     }
 

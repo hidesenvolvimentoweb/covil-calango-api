@@ -11,6 +11,7 @@ import br.com.yugiapp.model.Comanda;
 import br.com.yugiapp.model.Pedido;
 import br.com.yugiapp.model.Produto;
 import br.com.yugiapp.repository.EventoParticipanteRepository;
+import br.com.yugiapp.repository.PacoteRepository;
 import br.com.yugiapp.repository.PagamentoRepository;
 import br.com.yugiapp.repository.PedidoRepository;
 import br.com.yugiapp.repository.ProdutoRepository;
@@ -50,6 +51,7 @@ public class PedidoService {
     private final PedidoConverter pedidoConverter;
     private final PagamentoRepository pagamentoRepository;
     private final EventoParticipanteRepository eventoParticipanteRepository;
+    private final PacoteRepository pacoteRepository;
 
     public Page<Pedido> getAll(Pageable pageable) {
         return pedidoRepository.findAll(pageable);
@@ -81,6 +83,8 @@ public class PedidoService {
         }
         // Pedido de inscrição em evento: excluí-lo pela comanda também tira o cliente do evento.
         eventoParticipanteRepository.deleteByPedidoId(pedido.getId());
+        // Taxa de pacote: o pacote continua aguardando a retirada, só sem a cobrança.
+        pacoteRepository.desvincularPedido(pedido.getId());
         boolean devolverEstoque = STATUS_QUE_DEVOLVEM_ESTOQUE.contains(pedido.getStatus());
         pedidoRepository.delete(pedido);
         if (devolverEstoque) {

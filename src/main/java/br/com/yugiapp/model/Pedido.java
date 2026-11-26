@@ -58,8 +58,8 @@ public class Pedido implements Serializable {
     @Column(name = "VALOR_UNITARIO")
     private Double valorUnitario;
 
-    /** Inscrição em evento: entra no valor da comanda, mas não é um pedido da cozinha. */
-    public boolean inscricaoEmEvento() {
+    /** Item sem produto (inscrição em evento, taxa de pacote): entra no valor da comanda, mas não é da cozinha. */
+    public boolean itemAvulso() {
         return produto == null && descricao != null;
     }
 

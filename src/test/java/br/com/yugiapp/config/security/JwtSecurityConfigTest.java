@@ -61,7 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest
 @ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
         PedidoController.class, PagamentoController.class, br.com.yugiapp.controller.RelatorioController.class,
-        br.com.yugiapp.controller.EventoController.class,
+        br.com.yugiapp.controller.EventoController.class, br.com.yugiapp.controller.PacoteController.class,
         GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
         AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class,
         LimiteTentativasService.class})
@@ -79,9 +79,9 @@ class JwtSecurityConfigTest {
     /** Permissões de cada perfil, como estariam cadastradas na tela de Perfis. */
     private static final Map<String, List<String>> PERMISSOES_POR_PERFIL = Map.of(
             Permissoes.PERFIL_VISITANTE, List.of(Permissoes.APP_CARDAPIO, Permissoes.APP_MEUS_PEDIDOS,
-                    Permissoes.APP_MINHA_COMANDA, Permissoes.APP_MEU_PERFIL, Permissoes.APP_EVENTOS),
+                    Permissoes.APP_MINHA_COMANDA, Permissoes.APP_MEU_PERFIL, Permissoes.APP_EVENTOS, Permissoes.APP_PACOTES),
             ATENDENTE, List.of(Permissoes.WEB_COMANDAS, Permissoes.WEB_MANTER_PRODUTOS),
-            ORGANIZADOR, List.of(Permissoes.WEB_EVENTOS));
+            ORGANIZADOR, List.of(Permissoes.WEB_EVENTOS, Permissoes.WEB_PACOTES));
 
     @Autowired
     private MockMvc mockMvc;
@@ -96,6 +96,8 @@ class JwtSecurityConfigTest {
     private br.com.yugiapp.service.ConfiguracaoEventoService configuracaoEventoService;
     @MockBean
     private br.com.yugiapp.service.ParticipacaoEventoService participacaoEventoService;
+    @MockBean
+    private br.com.yugiapp.service.PacoteService pacoteService;
     @MockBean
     private br.com.yugiapp.service.ComandaNotificacaoService comandaNotificacaoService;
     @MockBean
@@ -464,5 +466,43 @@ class JwtSecurityConfigTest {
         mockMvc.perform(get("/api/evento/1/participantes").header("Authorization", bearerVisitante(COMANDA)))
                 .andExpect(status().isOk());
         verify(participacaoEventoService).getParticipantes(1L, false, COMANDA);
+    }
+
+    @Test
+    void clienteDoAppDeixaPacoteComAPropriaComandaEAEquipeDaBaixa() throws Exception {
+        br.com.yugiapp.model.Pacote pacote = br.com.yugiapp.model.Pacote.builder()
+                .comanda(br.com.yugiapp.model.Comanda.builder().numero(COMANDA).status("ABERTA").build()).build();
+        when(pacoteService.depositar(any(), any(), any(), any(), any())).thenReturn(pacote);
+        when(pacoteService.retirar(anyLong(), any(), any(), any())).thenReturn(pacote);
+        org.springframework.mock.web.MockMultipartFile foto =
+                new org.springframework.mock.web.MockMultipartFile("foto", "f.jpg", "image/jpeg", new byte[]{1});
+
+        mockMvc.perform(multipart("/api/pacote").file(foto).param("categoria", "PLAYMAT").param("descricao", "Playmat")
+                        .param("destinatario", "Joey").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        // A comanda vem do token, nunca da requisição.
+        verify(pacoteService).depositar(org.mockito.ArgumentMatchers.eq(COMANDA),
+                org.mockito.ArgumentMatchers.eq(br.com.yugiapp.enums.CategoriaPacoteEnum.PLAYMAT),
+                org.mockito.ArgumentMatchers.eq("Playmat"), org.mockito.ArgumentMatchers.eq("Joey"), any());
+        mockMvc.perform(get("/api/pacote/meus").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        verify(pacoteService).getDaComanda(COMANDA);
+
+        // A retirada e a listagem são da equipe com web-pacotes.
+        mockMvc.perform(get("/api/pacote").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/pacote/codigo/ABC234").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(multipart("/api/pacote/1/retirada").file(foto).param("codigo", "ABC234")
+                        .header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/pacote/codigo/ABC234").cookie(cookie(List.of(ATENDENTE))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(multipart("/api/pacote/1/retirada").file(foto).param("codigo", "ABC234")
+                        .cookie(cookie(List.of(ORGANIZADOR))).header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+        verify(pacoteService).retirar(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.eq("ABC234"),
+                any(), org.mockito.ArgumentMatchers.eq("admin@covil"));
     }
 }

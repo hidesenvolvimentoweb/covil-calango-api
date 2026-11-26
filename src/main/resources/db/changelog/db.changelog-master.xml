@@ -33,4 +33,5 @@
     <include file="db/changelog/changes/027-insert-permissoes-eventos.xml"/>
     <include file="db/changelog/changes/028-insert-parametros-eventos.xml"/>
     <include file="db/changelog/changes/029-create-tb-evento-participante.xml"/>
+    <include file="db/changelog/changes/030-create-tb-pacote.xml"/>
 </databaseChangeLog>

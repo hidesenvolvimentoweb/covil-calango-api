@@ -95,8 +95,8 @@ public class RelatorioService {
 
         List<Pedido> pedidosDoDia = pedidoRepository.findDoPeriodo(inicio, fim);
         List<Pedido> vendidos = pedidosDoDia.stream().filter(RelatorioService::cobrado).toList();
-        // Contagens de pedidos (cozinha): sem as inscrições em eventos, que só entram nos valores.
-        List<Pedido> pedidosDaCozinha = pedidosDoDia.stream().filter(p -> !p.inscricaoEmEvento()).toList();
+        // Contagens de pedidos (cozinha): sem as inscrições em eventos e as taxas de pacote, que só entram nos valores.
+        List<Pedido> pedidosDaCozinha = pedidosDoDia.stream().filter(p -> !p.itemAvulso()).toList();
         List<Comanda> entradas = comandaRepository.findEntradasNoPeriodo(inicio, fim);
 
         BigDecimal arrecadado = soma(fechadasNoDia.stream().map(c -> valorPorComanda.get(c.getId())));

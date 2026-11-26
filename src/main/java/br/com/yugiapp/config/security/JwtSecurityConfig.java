@@ -97,6 +97,14 @@ public class JwtSecurityConfig {
 
                         .requestMatchers("/api/relatorio", "/api/relatorio/**").hasAnyAuthority(exigir(WEB_DASHBOARD))
 
+                        // Pacotes: o cliente do app deixa, consulta e cancela os da própria comanda (a comanda vem do
+                        // token); a equipe lista, cancela e dá baixa na retirada.
+                        .requestMatchers(HttpMethod.GET, "/api/pacote/configuracao").hasAnyAuthority(exigir(APP_PACOTES, WEB_PACOTES))
+                        .requestMatchers(HttpMethod.GET, "/api/pacote/meus").hasAnyAuthority(exigir(APP_PACOTES))
+                        .requestMatchers(HttpMethod.POST, "/api/pacote").hasAnyAuthority(exigir(APP_PACOTES))
+                        .requestMatchers(HttpMethod.DELETE, "/api/pacote/meus/*").hasAnyAuthority(exigir(APP_PACOTES))
+                        .requestMatchers("/api/pacote", "/api/pacote/**").hasAnyAuthority(exigir(WEB_PACOTES))
+
                         // Eventos: o calendário é consultado pela equipe e pelos clientes do app; a manutenção é da equipe.
                         // Participar e sair: o cliente do app, sempre com a própria comanda (validado no controller).
                         .requestMatchers(HttpMethod.POST, "/api/evento/*/participacao").hasAnyAuthority(exigir(APP_EVENTOS))
