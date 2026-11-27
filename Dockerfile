@@ -14,11 +14,13 @@ COPY pom.xml .
 RUN mvn dependency:go-offline
 COPY src ./src
 RUN mvn clean package -DskipTests
+# Nome fixo, independente da versão do pom.xml (a versão sobe a cada commit).
+RUN cp target/covil-calango-api-*.jar target/app.jar
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=build /app/target/covil-calango-api-4.0.0-SNAPSHOT.jar .
+COPY --from=build /app/target/app.jar .
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "/app/covil-calango-api-4.0.0-SNAPSHOT.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

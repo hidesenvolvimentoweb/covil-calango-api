@@ -130,7 +130,7 @@ class MercadoPagoGatewayTest {
     }
 
     @Test
-    void criaOLinkDoMercadoPagoSoComCartaoDeCreditoOuDebitoAVista() {
+    void criaOLinkDoMercadoPagoComCartaoOuSaldoDaContaAVista() {
         servidor.expect(requestTo(BASE_URL + "/checkout/preferences"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-Idempotency-Key", "chave-3"))
@@ -141,7 +141,7 @@ class MercadoPagoGatewayTest {
                 .andExpect(jsonPath("$.payment_methods.installments").value(1))
                 .andExpect(jsonPath("$.payment_methods.excluded_payment_types[?(@.id == 'debit_card')]").doesNotExist())
                 .andExpect(jsonPath("$.payment_methods.excluded_payment_types[?(@.id == 'prepaid_card')]").exists())
-                .andExpect(jsonPath("$.payment_methods.excluded_payment_types[?(@.id == 'account_money')]").exists())
+                .andExpect(jsonPath("$.payment_methods.excluded_payment_types[?(@.id == 'account_money')]").doesNotExist())
                 .andExpect(jsonPath("$.expiration_date_to").value("2026-11-22T20:30:00.000-03:00"))
                 .andExpect(jsonPath("$.items[0].description").value("Comanda 1"))
                 .andExpect(jsonPath("$.items[0].category_id").value("entertainment"))

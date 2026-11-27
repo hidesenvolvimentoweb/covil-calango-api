@@ -457,10 +457,10 @@ public class PagamentoService {
         pagamento.setGatewayId(situacao.gatewayId());
         pagamento.setCartaoBandeira(limitar(situacao.bandeira(), 40));
         pagamento.setCartaoFinal(limitar(situacao.cartaoFinal(), 4));
-        if (situacao.tipoCartao() != null) {
-            pagamento.setCartaoTipo("debit_card".equals(situacao.tipoCartao())
-                    ? FormaPagamentoEnum.DEBITO
-                    : FormaPagamentoEnum.CREDITO);
+        if ("debit_card".equals(situacao.tipoCartao())) {
+            pagamento.setCartaoTipo(FormaPagamentoEnum.DEBITO);
+        } else if ("credit_card".equals(situacao.tipoCartao())) {
+            pagamento.setCartaoTipo(FormaPagamentoEnum.CREDITO);
         }
         pagamento.setStatusGateway(situacao.statusGateway());
         pagamentoRepository.save(pagamento);
@@ -583,7 +583,9 @@ public class PagamentoService {
             return false;
         }
         // Cartão (digitado ou na conta do Mercado Pago): crédito ou débito, conforme o tipo informado pelo provedor.
+        // O saldo da conta do Mercado Pago é dinheiro transferido na hora, como o PIX.
         FormaPagamentoEnum forma = pagamento.getMetodo() == MetodoPagamentoEnum.PIX
+                || MercadoPagoGateway.SALDO_EM_CONTA.equals(pagamento.getCartaoBandeira())
                 ? FormaPagamentoEnum.PIX
                 : pagamento.getCartaoTipo() != null ? pagamento.getCartaoTipo() : FormaPagamentoEnum.CREDITO;
         comandaService.fechar(comanda.getNumero(), forma);

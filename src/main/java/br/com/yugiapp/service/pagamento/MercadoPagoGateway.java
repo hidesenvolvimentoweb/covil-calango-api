@@ -51,9 +51,15 @@ public class MercadoPagoGateway implements GatewayPagamento {
 
     private static final String ENDPOINT_PAGAMENTOS = "/v1/payments";
     private static final String ENDPOINT_PREFERENCIAS = "/checkout/preferences";
-    /** Na conta do Mercado Pago, só cartão de crédito ou débito (sem saldo, boleto ou pré-pago). */
+    /**
+     * Na conta do Mercado Pago: cartão de crédito, débito ou o saldo da conta (sem boleto, PIX ou pré-pago). O saldo
+     * (account_money) não pode ser excluído quando a preferência é só para quem tem conta (wallet_purchase): o
+     * Mercado Pago recusa a preferência com "account_money cannot be excluded".
+     */
     private static final List<String> TIPOS_FORA_DA_CARTEIRA =
-            List.of("account_money", "ticket", "bank_transfer", "atm", "prepaid_card");
+            List.of("ticket", "bank_transfer", "atm", "prepaid_card");
+    /** payment_method_id/payment_type_id do pagamento feito com o saldo da conta do Mercado Pago. */
+    public static final String SALDO_EM_CONTA = "account_money";
     /** Formato aceito pelo Mercado Pago em date_of_expiration (ex.: 2026-11-22T20:30:00.000-03:00). */
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
     private static final int TIMEOUT_CONEXAO_MS = 5_000;
@@ -233,8 +239,8 @@ public class MercadoPagoGateway implements GatewayPagamento {
     }
 
     /**
-     * Preferência do Checkout Pro só para quem tem conta no Mercado Pago (wallet_purchase), à vista e só com cartão
-     * de crédito ou débito. binary_mode: o pagamento é aprovado ou recusado na hora, sem ficar em análise.
+     * Preferência do Checkout Pro só para quem tem conta no Mercado Pago (wallet_purchase), à vista, com cartão
+     * de crédito, débito ou o saldo da conta. binary_mode: o pagamento é aprovado ou recusado na hora, sem ficar em análise.
      * <p>
      * Ao terminar, o Mercado Pago devolve o cliente à página de retorno (back_urls), que reabre o app; com o pagamento
      * aprovado o retorno é automático (auto_return). A confirmação continua vindo só do webhook e da consulta ao
