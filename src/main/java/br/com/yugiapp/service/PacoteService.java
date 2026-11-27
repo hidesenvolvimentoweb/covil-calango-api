@@ -111,7 +111,7 @@ public class PacoteService {
         if (taxa.signum() > 0
                 && pagamentoRepository.existsByComandaNumeroAndStatus(comanda.getNumero(), StatusPagamentoEnum.PENDENTE)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Há um pagamento PIX em andamento para esta comanda. Cancele o PIX para deixar um pacote");
+                    "Há um pagamento pelo app em andamento para esta comanda. Cancele o pagamento para deixar um pacote");
         }
         String codigo = gerarCodigo();
         String caminhoFoto = salvarFoto(foto);
@@ -255,7 +255,7 @@ public class PacoteService {
         Pedido pedido = pacote.getPedido();
         if (pedido != null) {
             if (pagamentoRepository.existsByComandaNumeroAndStatus(pacote.getComanda().getNumero(), StatusPagamentoEnum.PENDENTE)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento PIX em andamento para a comanda "
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento pelo app em andamento para a comanda "
                         + pacote.getComanda().getNumero() + ". Cancele o pagamento antes de cancelar o pacote");
             }
             pacote.setPedido(null);

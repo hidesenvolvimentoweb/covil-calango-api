@@ -19,6 +19,8 @@ public class ProdutoRequestDTO {
     private Double valor;
     private String ingredientes;
     private Long prazo;
+    /** Preparado na cozinha: só pode ser pedido com a cozinha aberta. */
+    private Boolean usaCozinha;
     /** Unidades disponíveis para venda; nulo para não controlar o estoque. */
     private Integer estoque;
     /**

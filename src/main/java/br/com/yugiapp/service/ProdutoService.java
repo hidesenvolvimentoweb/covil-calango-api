@@ -122,6 +122,7 @@ public class ProdutoService {
         produto.setValor(updated.getValor());
         produto.setIngredientes(updated.getIngredientes());
         produto.setPrazo(updated.getPrazo());
+        produto.setUsaCozinha(updated.isUsaCozinha());
         produtoRepository.saveAndFlush(produto);
         if (Boolean.TRUE.equals(request.getAlterarEstoque())) {
             produtoRepository.definirEstoque(id, updated.getEstoque());
@@ -151,6 +152,7 @@ public class ProdutoService {
                 .valor(request.getValor())
                 .ingredientes(trimToNull(request.getIngredientes()))
                 .prazo(request.getPrazo())
+                .usaCozinha(Boolean.TRUE.equals(request.getUsaCozinha()))
                 .estoque(request.getEstoque())
                 .build();
     }
@@ -168,6 +170,7 @@ public class ProdutoService {
                 .valor(produto.getValor())
                 .ingredientes(produto.getIngredientes())
                 .prazo(produto.getPrazo())
+                .usaCozinha(produto.isUsaCozinha())
                 .estoque(produto.getEstoque())
                 .build();
     }

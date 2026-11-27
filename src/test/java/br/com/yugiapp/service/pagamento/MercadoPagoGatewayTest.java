@@ -35,7 +35,7 @@ class MercadoPagoGatewayTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         servidor = MockRestServiceServer.bindTo(builder).build();
         gateway = new MercadoPagoGateway(builder.build(), true,
-                MercadoPagoGateway.montarUrlNotificacao("https://api.covil.local/"));
+                "https://api.covil.local/");
     }
 
     @Test
@@ -94,6 +94,124 @@ class MercadoPagoGatewayTest {
     }
 
     @Test
+    void cobraOCartaoAVistaComTokenVerificacaoDoBancoEIdempotencia() {
+        servidor.expect(requestTo(BASE_URL + "/v1/payments"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Idempotency-Key", "chave-2"))
+                .andExpect(jsonPath("$.transaction_amount").value(25.5))
+                .andExpect(jsonPath("$.token").value("tok_123"))
+                .andExpect(jsonPath("$.installments").value(1))
+                .andExpect(jsonPath("$.payment_method_id").value("visa"))
+                .andExpect(jsonPath("$.issuer_id").value("25"))
+                .andExpect(jsonPath("$.three_d_secure_mode").value("optional"))
+                .andExpect(jsonPath("$.external_reference").value("PAG-7"))
+                .andExpect(jsonPath("$.payer.email").value("titular@email.com"))
+                .andExpect(jsonPath("$.payer.identification.type").value("CPF"))
+                .andExpect(jsonPath("$.payer.identification.number").value("12345678909"))
+                .andRespond(withSuccess("""
+                        {"id": 555, "status": "pending", "status_detail": "pending_challenge", "transaction_amount": 25.5,
+                         "external_reference": "PAG-7", "payment_method_id": "visa", "payment_type_id": "credit_card",
+                         "card": {"last_four_digits": "4242"},
+                         "three_ds_info": {"external_resource_url": "https://banco/3ds", "creq": "creq-1"}}
+                        """, MediaType.APPLICATION_JSON));
+
+        SituacaoPagamento situacao = gateway.pagarComCartao(new SolicitacaoPagamentoCartao("PAG-7",
+                new BigDecimal("25.50"), "Comanda 1", "tok_123", "visa", "25", "titular@email.com", "CPF",
+                "12345678909", "chave-2"));
+
+        servidor.verify();
+        assertThat(situacao.gatewayId()).isEqualTo("555");
+        assertThat(situacao.status()).isEqualTo(StatusPagamentoEnum.PENDENTE);
+        assertThat(situacao.statusDetalhe()).isEqualTo("pending_challenge");
+        assertThat(situacao.cartaoFinal()).isEqualTo("4242");
+        assertThat(situacao.tipoCartao()).isEqualTo("credit_card");
+        assertThat(situacao.desafioUrl()).isEqualTo("https://banco/3ds");
+        assertThat(situacao.desafioCreq()).isEqualTo("creq-1");
+    }
+
+    @Test
+    void criaOLinkDoMercadoPagoSoComCartaoDeCreditoOuDebitoAVista() {
+        servidor.expect(requestTo(BASE_URL + "/checkout/preferences"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Idempotency-Key", "chave-3"))
+                .andExpect(jsonPath("$.external_reference").value("PAG-8"))
+                .andExpect(jsonPath("$.items[0].unit_price").value(25.5))
+                .andExpect(jsonPath("$.purpose").value("wallet_purchase"))
+                .andExpect(jsonPath("$.binary_mode").value(true))
+                .andExpect(jsonPath("$.payment_methods.installments").value(1))
+                .andExpect(jsonPath("$.payment_methods.excluded_payment_types[?(@.id == 'debit_card')]").doesNotExist())
+                .andExpect(jsonPath("$.payment_methods.excluded_payment_types[?(@.id == 'prepaid_card')]").exists())
+                .andExpect(jsonPath("$.payment_methods.excluded_payment_types[?(@.id == 'account_money')]").exists())
+                .andExpect(jsonPath("$.expiration_date_to").value("2026-11-22T20:30:00.000-03:00"))
+                .andExpect(jsonPath("$.items[0].description").value("Comanda 1"))
+                .andExpect(jsonPath("$.items[0].category_id").value("entertainment"))
+                .andExpect(jsonPath("$.statement_descriptor").value("COVILDOCALANGO"))
+                .andExpect(jsonPath("$.payer.name").value("Maria"))
+                .andExpect(jsonPath("$.payer.surname").value("da Silva"))
+                .andExpect(jsonPath("$.payer.email").value("maria@exemplo.com"))
+                .andExpect(jsonPath("$.payer.phone.area_code").value("61"))
+                .andExpect(jsonPath("$.payer.phone.number").value("999998888"))
+                .andExpect(jsonPath("$.back_urls.success")
+                        .value("https://api.covil.local/api/pagamento/retorno/mercadopago?resultado=aprovado"))
+                .andExpect(jsonPath("$.back_urls.failure")
+                        .value("https://api.covil.local/api/pagamento/retorno/mercadopago?resultado=recusado"))
+                .andExpect(jsonPath("$.auto_return").value("approved"))
+                .andRespond(withSuccess("""
+                        {"id": "pref-1", "init_point": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref-1"}
+                        """, MediaType.APPLICATION_JSON));
+
+        PreferenciaCheckout preferencia = gateway.criarPreferencia(new SolicitacaoPreferencia("PAG-8",
+                new BigDecimal("25.50"), "Comanda 1", OffsetDateTime.parse("2026-11-22T20:30:00-03:00"), "chave-3",
+                "  Maria   da Silva ", "maria@exemplo.com", "5561999998888"));
+
+        servidor.verify();
+        assertThat(preferencia.id()).isEqualTo("pref-1");
+        assertThat(preferencia.url()).contains("pref_id=pref-1");
+    }
+
+    @Test
+    void semDadosDoClienteAPreferenciaNaoLevaPagadorESemApiUrlNaoLevaRetorno() {
+        MercadoPagoGateway semApiUrl = new MercadoPagoGateway(RestClient.create(), true, null);
+        assertThat(MercadoPagoGateway.pagadorDaPreferencia(new SolicitacaoPreferencia("PAG-1", BigDecimal.ONE, "Comanda 1",
+                OffsetDateTime.now(), "chave", " ", null, "123"))).isEmpty();
+        assertThat(MercadoPagoGateway.pagadorDaPreferencia(new SolicitacaoPreferencia("PAG-1", BigDecimal.ONE, "Comanda 1",
+                OffsetDateTime.now(), "chave", "Maria", null, "6133334444")))
+                .containsEntry("name", "Maria").doesNotContainKey("surname")
+                .containsEntry("phone", java.util.Map.of("area_code", "61", "number", "33334444"));
+        assertThat(semApiUrl).isNotNull();
+    }
+
+    @Test
+    void buscaPelaReferenciaPrefereOPagamentoAprovado() {
+        servidor.expect(requestTo(BASE_URL + "/v1/payments/search?external_reference=PAG-8&sort=date_created&criteria=desc"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"results": [
+                          {"id": 3, "status": "rejected", "external_reference": "PAG-8", "transaction_amount": 25.5},
+                          {"id": 2, "status": "approved", "external_reference": "PAG-8", "transaction_amount": 25.5},
+                          {"id": 1, "status": "approved", "external_reference": "PAG-80", "transaction_amount": 25.5}
+                        ]}
+                        """, MediaType.APPLICATION_JSON));
+
+        SituacaoPagamento situacao = gateway.buscarPorReferencia("PAG-8").orElseThrow();
+
+        assertThat(situacao.gatewayId()).isEqualTo("2");
+        assertThat(situacao.status()).isEqualTo(StatusPagamentoEnum.PAGO);
+    }
+
+    @Test
+    void estornaOValorTotalComChaveDeIdempotencia() {
+        servidor.expect(requestTo(BASE_URL + "/v1/payments/555/refunds"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Idempotency-Key", "estorno-chave"))
+                .andRespond(withSuccess("{\"id\": 1, \"status\": \"approved\"}", MediaType.APPLICATION_JSON));
+
+        gateway.estornar("555", "estorno-chave");
+
+        servidor.verify();
+    }
+
+    @Test
     void semAccessTokenNaoChamaOMercadoPago() {
         MercadoPagoGateway semToken = new MercadoPagoGateway(RestClient.create(), false, null);
 
@@ -116,7 +234,7 @@ class MercadoPagoGatewayTest {
             "pending,pending_waiting_transfer,PENDENTE",
             "cancelled,expired,EXPIRADO",
             "cancelled,by_collector,CANCELADO",
-            "rejected,cc_rejected_other_reason,CANCELADO",
+            "rejected,cc_rejected_other_reason,RECUSADO",
             "refunded,refunded,ESTORNADO"
     })
     void converteStatusDoMercadoPago(String status, String detalhe, StatusPagamentoEnum esperado) {

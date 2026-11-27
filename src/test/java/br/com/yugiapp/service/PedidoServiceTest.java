@@ -41,6 +41,8 @@ class PedidoServiceTest {
     private final ProdutoRepository produtoRepository = mock(ProdutoRepository.class);
     private final ComandaService comandaService = mock(ComandaService.class);
     private final PagamentoRepository pagamentoRepository = mock(PagamentoRepository.class);
+    private final br.com.yugiapp.repository.ParametroRepository parametroRepository =
+            mock(br.com.yugiapp.repository.ParametroRepository.class);
     private PedidoService service;
 
     @BeforeEach
@@ -48,7 +50,7 @@ class PedidoServiceTest {
         service = new PedidoService(pedidoRepository, produtoRepository, comandaService,
                 mock(PedidoSpecifications.class), mock(PedidoConverter.class), pagamentoRepository,
                 mock(br.com.yugiapp.repository.EventoParticipanteRepository.class),
-                mock(br.com.yugiapp.repository.PacoteRepository.class));
+                mock(br.com.yugiapp.repository.PacoteRepository.class), new CozinhaService(parametroRepository));
         when(comandaService.travarParaAtualizacao(COMANDA)).thenReturn(Comanda.builder().numero(COMANDA)
                 .status(StatusComandaEnum.ABERTA.getValue()).build());
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(Produto.builder().id(1L).valor(10.0).build()));
@@ -132,6 +134,44 @@ class PedidoServiceTest {
     private void produtoComEstoque(Integer estoque) {
         when(produtoRepository.findById(1L)).thenReturn(Optional.of(Produto.builder().id(1L).nome("Água")
                 .valor(5.0).estoque(estoque).build()));
+    }
+
+    private void cozinha(String valor) {
+        when(parametroRepository.findByNome("COZINHA_ABERTA")).thenReturn(Optional.of(
+                br.com.yugiapp.model.Parametro.builder().nome("COZINHA_ABERTA").descricao(valor).build()));
+    }
+
+    private void produtoDaCozinha(boolean usaCozinha) {
+        when(produtoRepository.findById(1L)).thenReturn(Optional.of(Produto.builder().id(1L).nome("X-Calango")
+                .valor(25.0).usaCozinha(usaCozinha).build()));
+    }
+
+    @Test
+    void cozinhaFechadaRecusaProdutoDaCozinhaSemDarBaixa() {
+        cozinha("false");
+        produtoDaCozinha(true);
+        assertThatThrownBy(() -> service.save(pedido(1L)))
+                .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                    assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(e.getReason()).isEqualTo("A cozinha está fechada: X-Calango não pode ser pedido agora");
+                });
+        verify(produtoRepository, never()).baixarEstoque(any(), anyInt());
+        verify(pedidoRepository, never()).save(any());
+    }
+
+    @Test
+    void cozinhaFechadaAindaVendeProdutoQueNaoPassaPelaCozinha() {
+        cozinha("false");
+        produtoDaCozinha(false);
+        assertThat(service.save(pedido(1L)).getStatus()).isEqualTo(StatusPedidoEnum.SOLICITADO);
+    }
+
+    @Test
+    void cozinhaAbertaOuSemParametroAceitaProdutoDaCozinha() {
+        produtoDaCozinha(true);
+        assertThat(service.save(pedido(1L)).getStatus()).isEqualTo(StatusPedidoEnum.SOLICITADO);
+        cozinha("true");
+        assertThat(service.save(pedido(1L)).getStatus()).isEqualTo(StatusPedidoEnum.SOLICITADO);
     }
 
     @Test

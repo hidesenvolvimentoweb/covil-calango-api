@@ -185,11 +185,14 @@ class PagamentoServiceTest {
     }
 
     @Test
-    void notificacaoDePagamentoDesconhecidoEhIgnorada() {
+    void notificacaoDePagamentoDeOutraOrigemEhIgnorada() {
         when(pagamentoRepository.findIdByGatewayAndGatewayId("MERCADO_PAGO", "1")).thenReturn(Optional.empty());
+        // Ex.: venda na maquininha da mesma conta: a referência não é de um pagamento desta API.
+        when(gateway.consultar("1")).thenReturn(situacao(StatusPagamentoEnum.PAGO, null, VALOR));
 
         assertThat(service.processarNotificacao("1")).isFalse();
-        verify(gateway, never()).consultar(any());
+        verify(pagamentoRepository, never()).findByIdParaAtualizacao(any());
+        verify(comandaService, never()).fechar(any(), any());
     }
 
     @Test

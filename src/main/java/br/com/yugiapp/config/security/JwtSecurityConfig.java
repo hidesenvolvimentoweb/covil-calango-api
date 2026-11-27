@@ -77,6 +77,11 @@ public class JwtSecurityConfig {
                                 APP_MEUS_PEDIDOS, APP_MINHA_COMANDA, WEB_PEDIDOS, WEB_DASHBOARD, WEB_COMANDAS))
                         .requestMatchers("/api/pedido/**").hasAnyAuthority(exigir(WEB_PEDIDOS))
 
+                        // O cardápio mostra se a cozinha está aberta; quem a abre e fecha é a equipe, pela tela de Pedidos.
+                        .requestMatchers(HttpMethod.GET, "/api/cozinha").hasAnyAuthority(exigir(
+                                APP_CARDAPIO, WEB_PEDIDOS, WEB_MANTER_PRODUTOS))
+                        .requestMatchers("/api/cozinha", "/api/cozinha/**").hasAnyAuthority(exigir(WEB_PEDIDOS))
+
                         .requestMatchers(HttpMethod.GET, "/api/comanda").hasAnyAuthority(exigir(WEB_COMANDAS, WEB_DASHBOARD))
                         .requestMatchers(HttpMethod.POST, "/api/comanda/gerar/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
                         // Consulta: o visitante só a própria comanda (validado no controller).
@@ -89,9 +94,18 @@ public class JwtSecurityConfig {
                         // Pagamento: o webhook do provedor é público (a notificação só dispara uma consulta ao
                         // provedor); o visitante só paga a própria comanda (validado no controller).
                         .requestMatchers(HttpMethod.POST, "/api/pagamento/webhook/**").permitAll()
+                        // Página de retorno do Checkout Pro: aberta no navegador do celular, só reabre o app.
+                        .requestMatchers(HttpMethod.GET, "/api/pagamento/retorno/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/pagamento/comanda/*").hasAnyAuthority(exigir(
                                 APP_MINHA_COMANDA, WEB_COMANDAS, WEB_DASHBOARD))
                         .requestMatchers("/api/pagamento/comanda/*/pix").hasAnyAuthority(exigir(APP_MINHA_COMANDA, WEB_COMANDAS))
+                        // Cartão e conta do Mercado Pago: só o cliente, pelo app (a equipe não digita o cartão dele).
+                        .requestMatchers(HttpMethod.GET, "/api/pagamento/configuracao").hasAnyAuthority(exigir(APP_MINHA_COMANDA))
+                        .requestMatchers(HttpMethod.POST, "/api/pagamento/comanda/*/cartao", "/api/pagamento/comanda/*/mercado-pago")
+                        .hasAnyAuthority(exigir(APP_MINHA_COMANDA))
+                        // Estorno: devolve dinheiro ao cliente, então só o administrador.
+                        .requestMatchers(HttpMethod.POST, "/api/pagamento/*/estorno").hasAuthority(PERFIL_ADMINISTRADOR)
+                        .requestMatchers("/api/pagamento", "/api/pagamento/**").denyAll()
 
                         .requestMatchers("/api/solicitacao", "/api/solicitacao/**").hasAnyAuthority(exigir(WEB_SOLICITACOES))
 

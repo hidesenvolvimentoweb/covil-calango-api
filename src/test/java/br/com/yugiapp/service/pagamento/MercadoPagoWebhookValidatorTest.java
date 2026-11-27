@@ -47,6 +47,17 @@ class MercadoPagoWebhookValidatorTest {
     }
 
     @Test
+    void aceitaAssinaturaDaAplicacaoDoCheckoutPro() throws Exception {
+        String v1 = assinar("id:123456;request-id:req-1;ts:1700000000;");
+        MercadoPagoWebhookValidator validator = new MercadoPagoWebhookValidator("segredo-do-transparente", SEGREDO);
+
+        assertThat(validator.isAssinaturaExigida()).isTrue();
+        assertThat(validator.validar("ts=1700000000,v1=" + v1, "req-1", "123456")).isTrue();
+        assertThat(new MercadoPagoWebhookValidator("segredo-do-transparente", "outro")
+                .validar("ts=1700000000,v1=" + v1, "req-1", "123456")).isFalse();
+    }
+
+    @Test
     void semSegredoConfiguradoNaoExigeAssinatura() {
         MercadoPagoWebhookValidator validator = new MercadoPagoWebhookValidator("");
 

@@ -46,6 +46,11 @@ public class Produto implements Serializable {
     @Column(name = "PRAZO")
     private Long prazo;
 
+    /** Preparado na cozinha (hambúrgueres, batatas, combos...): só pode ser pedido com a cozinha aberta. */
+    @Builder.Default
+    @Column(name = "USA_COZINHA", nullable = false)
+    private boolean usaCozinha = false;
+
     /**
      * Unidades disponíveis para venda; nulo quando o produto não tem controle de estoque. Nunca é enviado ao cliente
      * (a entidade é devolvida pelo cardápio do app): ele recebe apenas {@link #getQuantidadeMaximaPedido()}.

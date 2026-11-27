@@ -15,6 +15,8 @@ public enum StatusPagamentoEnum {
     PAGO("Pago"),
     EXPIRADO("Expirado"),
     CANCELADO("Cancelado"),
+    /** Cartão recusado pelo emissor ou pela análise antifraude; a comanda continua aberta. */
+    RECUSADO("Recusado"),
     ESTORNADO("Estornado");
 
     private final String value;

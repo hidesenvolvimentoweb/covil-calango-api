@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!--
+        Pagamento da comanda com cartão de crédito ou débito pelo app (formulário do Mercado Pago, que transforma o cartão em
+        token) e pela conta do cliente no Mercado Pago (Checkout Pro). Do cartão, só a bandeira e os 4 últimos dígitos
+        são gravados.
+    -->
+    <changeSet id="057-add-tb-pagamento-cartao" author="covil-calango">
+        <addColumn tableName="tb_pagamento">
+            <column name="cartao_bandeira" type="VARCHAR(40)"/>
+            <column name="cartao_tipo" type="VARCHAR(20)"/>
+            <column name="cartao_final" type="VARCHAR(4)"/>
+            <column name="motivo_recusa" type="VARCHAR(80)"/>
+            <column name="preferencia_id" type="VARCHAR(80)"/>
+            <column name="url_checkout" type="TEXT"/>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

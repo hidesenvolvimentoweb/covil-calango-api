@@ -34,4 +34,6 @@
     <include file="db/changelog/changes/028-insert-parametros-eventos.xml"/>
     <include file="db/changelog/changes/029-create-tb-evento-participante.xml"/>
     <include file="db/changelog/changes/030-create-tb-pacote.xml"/>
+    <include file="db/changelog/changes/031-cozinha.xml"/>
+    <include file="db/changelog/changes/032-pagamento-cartao.xml"/>
 </databaseChangeLog>

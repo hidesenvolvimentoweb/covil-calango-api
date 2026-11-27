@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+    <!--
+        Abertura e fechamento da cozinha. Os produtos preparados na cozinha (hambúrgueres, batatas, combos...) só podem
+        ser pedidos com a cozinha aberta; os demais (bebidas, doces...) continuam à venda.
+    -->
+    <changeSet id="055-add-produto-usa-cozinha" author="covil-calango">
+        <addColumn tableName="tb_produto">
+            <column name="usa_cozinha" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <!-- Ponto de partida: hambúrgueres e combos saem da cozinha. A equipe ajusta os demais no cadastro. -->
+        <sql>
+            UPDATE public.tb_produto SET usa_cozinha = TRUE WHERE categoria IN ('HAMBURGUER', 'COMBOS')
+        </sql>
+    </changeSet>
+
+    <!-- COZINHA_ABERTA: "true" com a cozinha recebendo pedidos, "false" com ela fechada (alterado pela tela de Pedidos). -->
+    <changeSet id="056-insert-parametro-cozinha-aberta" author="covil-calango">
+        <sql>
+            INSERT INTO public.tb_parametro (id, nome, descricao, tipo)
+            SELECT nextval('public.tb_parametro_seq'), 'COZINHA_ABERTA', 'true', 'TEXTO'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM public.tb_parametro existente WHERE existente.nome = 'COZINHA_ABERTA'
+            )
+        </sql>
+    </changeSet>
+</databaseChangeLog>

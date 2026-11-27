@@ -134,7 +134,7 @@ class ParticipacaoEventoServiceTest {
         evento(HOJE_14H, HOJE_14H.plusHours(6), 25.0, null);
         when(pagamentoRepository.existsByComandaNumeroAndStatus(COMANDA, StatusPagamentoEnum.PENDENTE)).thenReturn(true);
         assertConflito(() -> service.participar(1L, COMANDA),
-                "Há um pagamento PIX em andamento para esta comanda. Cancele o PIX para participar do evento");
+                "Há um pagamento pelo app em andamento para esta comanda. Cancele o pagamento para participar do evento");
 
         comanda.setStatus(StatusComandaEnum.FECHADA.getValue());
         assertConflito(() -> service.participar(1L, COMANDA),
@@ -196,7 +196,7 @@ class ParticipacaoEventoServiceTest {
         when(pagamentoRepository.existsByComandaNumeroAndStatus(COMANDA, StatusPagamentoEnum.PENDENTE)).thenReturn(true);
 
         // A exceção desfaz a transação inteira (nenhum participante removido).
-        assertConflito(() -> service.removerTodos(1L), "Há um pagamento PIX em andamento para a comanda " + COMANDA
+        assertConflito(() -> service.removerTodos(1L), "Há um pagamento pelo app em andamento para a comanda " + COMANDA
                 + ". Cancele o pagamento antes de remover a inscrição do evento");
     }
 

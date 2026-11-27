@@ -52,6 +52,7 @@ public class PedidoService {
     private final PagamentoRepository pagamentoRepository;
     private final EventoParticipanteRepository eventoParticipanteRepository;
     private final PacoteRepository pacoteRepository;
+    private final CozinhaService cozinhaService;
 
     public Page<Pedido> getAll(Pageable pageable) {
         return pedidoRepository.findAll(pageable);
@@ -106,10 +107,12 @@ public class PedidoService {
         // O valor do PIX já foi fixado: um pedido novo ficaria fora da cobrança.
         if (pagamentoRepository.existsByComandaNumeroAndStatus(comanda.getNumero(), StatusPagamentoEnum.PENDENTE)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Há um pagamento PIX em andamento para esta comanda. Cancele o PIX para fazer novos pedidos");
+                    "Há um pagamento pelo app em andamento para esta comanda. Cancele o pagamento para fazer novos pedidos");
         }
         Produto produto = produtoRepository.findById(pedidoRequestDTO.getProduto().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado"));
+        // Com a cozinha fechada, só os produtos que não passam por ela (bebidas, doces...) podem ser pedidos.
+        cozinhaService.exigirDisponivel(produto);
         baixarEstoque(produto, pedidoRequestDTO.getQuantidade());
         String observacao = pedidoRequestDTO.getObservacao() == null || pedidoRequestDTO.getObservacao().isBlank()
                 ? null
@@ -170,7 +173,7 @@ public class PedidoService {
     private void exigirSemPixPendente(Pedido pedido, String acao) {
         String numero = pedido.getComanda() == null ? null : pedido.getComanda().getNumero();
         if (numero != null && pagamentoRepository.existsByComandaNumeroAndStatus(numero, StatusPagamentoEnum.PENDENTE)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento PIX em andamento para a comanda "
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento pelo app em andamento para a comanda "
                     + numero + ". Cancele o pagamento antes de " + acao + " o pedido");
         }
     }

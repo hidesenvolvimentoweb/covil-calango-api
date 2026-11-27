@@ -126,7 +126,7 @@ class PacoteServiceTest {
 
         when(pagamentoRepository.existsByComandaNumeroAndStatus(COMANDA, StatusPagamentoEnum.PENDENTE)).thenReturn(true);
         assertErro(() -> service.depositar(COMANDA, CategoriaPacoteEnum.CARTA, "Carta", "Joey", foto), HttpStatus.CONFLICT,
-                "Há um pagamento PIX em andamento para esta comanda. Cancele o PIX para deixar um pacote");
+                "Há um pagamento pelo app em andamento para esta comanda. Cancele o pagamento para deixar um pacote");
 
         comanda.setStatus(StatusComandaEnum.FECHADA.getValue());
         assertErro(() -> service.depositar(COMANDA, CategoriaPacoteEnum.CARTA, "Carta", "Joey", foto), HttpStatus.CONFLICT,
@@ -181,7 +181,7 @@ class PacoteServiceTest {
         Pacote pacote = aguardando(pedido);
         when(pagamentoRepository.existsByComandaNumeroAndStatus(COMANDA, StatusPagamentoEnum.PENDENTE)).thenReturn(true);
 
-        assertErro(() -> service.cancelarPelaEquipe(9L), HttpStatus.CONFLICT, "Há um pagamento PIX em andamento para a "
+        assertErro(() -> service.cancelarPelaEquipe(9L), HttpStatus.CONFLICT, "Há um pagamento pelo app em andamento para a "
                 + "comanda " + COMANDA + ". Cancele o pagamento antes de cancelar o pacote");
         assertThat(pacote.getStatus()).isEqualTo(StatusPacoteEnum.AGUARDANDO_RETIRADA);
         verify(pedidoRepository, never()).delete(any());

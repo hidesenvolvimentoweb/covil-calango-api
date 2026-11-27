@@ -54,6 +54,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -62,6 +63,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ContextConfiguration(classes = {ParametroController.class, AuthController.class, ComandaController.class,
         PedidoController.class, PagamentoController.class, br.com.yugiapp.controller.RelatorioController.class,
         br.com.yugiapp.controller.EventoController.class, br.com.yugiapp.controller.PacoteController.class,
+        br.com.yugiapp.controller.CozinhaController.class,
         GlobalExceptionHandler.class, JwtSecurityConfig.class, JwtTokenService.class,
         AuthCookieService.class, AcessoService.class, AutenticacaoJwtService.class, OrigensConfiaveis.class,
         LimiteTentativasService.class})
@@ -98,6 +100,8 @@ class JwtSecurityConfigTest {
     private br.com.yugiapp.service.ParticipacaoEventoService participacaoEventoService;
     @MockBean
     private br.com.yugiapp.service.PacoteService pacoteService;
+    @MockBean
+    private br.com.yugiapp.service.CozinhaService cozinhaService;
     @MockBean
     private br.com.yugiapp.service.ComandaNotificacaoService comandaNotificacaoService;
     @MockBean
@@ -347,6 +351,50 @@ class JwtSecurityConfigTest {
     }
 
     @Test
+    void cartaoEMercadoPagoSaoDoClienteEOEstornoSoDoAdministrador() throws Exception {
+        when(pagamentoService.pagarComCartao(any(), any())).thenReturn(PagamentoResponseDTO.builder().comanda(COMANDA).build());
+        when(pagamentoService.gerarPagamentoMercadoPago(COMANDA)).thenReturn(PagamentoResponseDTO.builder().comanda(COMANDA).build());
+        when(pagamentoService.estornar(7L)).thenReturn(COMANDA);
+        String cartao = "{\"token\":\"tok\",\"bandeira\":\"visa\",\"email\":\"a@b.com\",\"tipoDocumento\":\"CPF\",\"documento\":\"12345678909\"}";
+
+        mockMvc.perform(get("/api/pagamento/configuracao").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/pagamento/comanda/" + COMANDA + "/cartao").header("Authorization", bearerVisitante(COMANDA))
+                        .contentType("application/json").content(cartao))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/pagamento/comanda/202615-99/cartao").header("Authorization", bearerVisitante(COMANDA))
+                        .contentType("application/json").content(cartao))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/pagamento/comanda/" + COMANDA + "/mercado-pago").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk());
+        // A equipe não digita o cartão do cliente.
+        mockMvc.perform(post("/api/pagamento/comanda/" + COMANDA + "/cartao").cookie(cookie(List.of(ATENDENTE)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest")
+                        .contentType("application/json").content(cartao))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/pagamento/7/estorno").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/pagamento/7/estorno").cookie(cookie(List.of(ATENDENTE)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isForbidden());
+        verify(pagamentoService, never()).estornar(any());
+        mockMvc.perform(post("/api/pagamento/7/estorno").cookie(cookie(List.of(ADMIN)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest"))
+                .andExpect(status().isOk());
+        verify(pagamentoService).estornar(7L);
+        verify(comandaNotificacaoService).notificarAlteracao(COMANDA);
+    }
+
+    @Test
+    void paginaDeRetornoDoCheckoutProEhPublicaEReabreOApp() throws Exception {
+        mockMvc.perform(get("/api/pagamento/retorno/mercadopago").param("resultado", "aprovado"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(allOf(containsString("covilcalango://minha-comanda"),
+                        containsString("Pagamento aprovado"))));
+    }
+
+    @Test
     void webhookDoMercadoPagoEhPublicoEConfereAssinatura() throws Exception {
         when(mercadoPagoWebhookValidator.validar("ts=1,v1=ab", "req-1", "123")).thenReturn(true);
         mockMvc.perform(post("/api/pagamento/webhook/mercadopago").param("data.id", "123").param("type", "payment")
@@ -466,6 +514,31 @@ class JwtSecurityConfigTest {
         mockMvc.perform(get("/api/evento/1/participantes").header("Authorization", bearerVisitante(COMANDA)))
                 .andExpect(status().isOk());
         verify(participacaoEventoService).getParticipantes(1L, false, COMANDA);
+    }
+
+    @Test
+    void clienteDoAppVeSeACozinhaEstaAbertaMasSoAEquipeDosPedidosAbreEFecha() throws Exception {
+        when(cozinhaService.isAberta()).thenReturn(true);
+        when(cozinhaService.definirAberta(false)).thenReturn(false);
+        mockMvc.perform(get("/api/cozinha").header("Authorization", bearerVisitante(COMANDA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aberta").value(true));
+
+        mockMvc.perform(put("/api/cozinha").header("Authorization", bearerVisitante(COMANDA))
+                        .contentType("application/json").content("{\"aberta\":false}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/cozinha").cookie(cookie(List.of(ATENDENTE)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest")
+                        .contentType("application/json").content("{\"aberta\":false}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/cozinha").cookie(cookie(List.of(ADMIN)))
+                        .header(UserAuthenticationFilter.CABECALHO_CSRF, "XMLHttpRequest")
+                        .contentType("application/json").content("{\"aberta\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aberta").value(false));
+        verify(cozinhaService).definirAberta(false);
+        verify(messagingTemplate).convertAndSend(org.mockito.ArgumentMatchers.eq("/topic/cozinha"),
+                org.mockito.ArgumentMatchers.any(Object.class));
     }
 
     @Test

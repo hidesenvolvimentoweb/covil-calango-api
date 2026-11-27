@@ -1,5 +1,6 @@
 package br.com.yugiapp.model;
 
+import br.com.yugiapp.enums.FormaPagamentoEnum;
 import br.com.yugiapp.enums.MetodoPagamentoEnum;
 import br.com.yugiapp.enums.StatusPagamentoEnum;
 import jakarta.persistence.*;
@@ -75,6 +76,42 @@ public class Pagamento implements Serializable {
     @ToString.Exclude
     @Column(name = "PIX_QR_CODE_BASE64", columnDefinition = "TEXT")
     private String pixQrCodeBase64;
+
+    /** Bandeira do cartão (payment_method_id do provedor, ex.: visa, master). */
+    @Column(name = "CARTAO_BANDEIRA", length = 40)
+    private String cartaoBandeira;
+
+    /** Crédito ou débito, conforme o cartão usado (payment_type_id do provedor). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "CARTAO_TIPO", length = 20)
+    private FormaPagamentoEnum cartaoTipo;
+
+    /** Últimos 4 dígitos do cartão; o número completo nunca passa pela API. */
+    @Column(name = "CARTAO_FINAL", length = 4)
+    private String cartaoFinal;
+
+    /** Motivo da recusa devolvido pelo provedor (status_detail, ex.: cc_rejected_insufficient_amount). */
+    @Column(name = "MOTIVO_RECUSA", length = 80)
+    private String motivoRecusa;
+
+    /** Preferência do Checkout Pro (pagamento pela conta do Mercado Pago). */
+    @Column(name = "PREFERENCIA_ID", length = 80)
+    private String preferenciaId;
+
+    /** Endereço do Checkout Pro que o app abre para o cliente pagar na conta do Mercado Pago. */
+    @ToString.Exclude
+    @Column(name = "URL_CHECKOUT", columnDefinition = "TEXT")
+    private String urlCheckout;
+
+    /** Verificação do banco (3DS) pendente: endereço do desafio. Só vai na resposta da criação; não é gravado. */
+    @Transient
+    @ToString.Exclude
+    private String desafioUrl;
+
+    /** Verificação do banco (3DS): dados do desafio (creq), enviados ao endereço do desafio. Não é gravado. */
+    @Transient
+    @ToString.Exclude
+    private String desafioCreq;
 
     @Column(name = "DT_HORA_CRIACAO", nullable = false)
     private LocalDateTime dataHoraCriacao;

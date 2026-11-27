@@ -92,7 +92,7 @@ public class ParticipacaoEventoService {
             // O valor do PIX já foi fixado: a inscrição ficaria fora da cobrança.
             if (pagamentoRepository.existsByComandaNumeroAndStatus(comanda.getNumero(), StatusPagamentoEnum.PENDENTE)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Há um pagamento PIX em andamento para esta comanda. Cancele o PIX para participar do evento");
+                        "Há um pagamento pelo app em andamento para esta comanda. Cancele o pagamento para participar do evento");
             }
             pedido = pedidoRepository.save(Pedido.builder()
                     .dataHora(LocalDateTime.now())
@@ -209,7 +209,7 @@ public class ParticipacaoEventoService {
         Pedido pedido = participante.getPedido();
         if (pedido != null && pagamentoRepository.existsByComandaNumeroAndStatus(
                 participante.getComanda().getNumero(), StatusPagamentoEnum.PENDENTE)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento PIX em andamento para a comanda "
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento pelo app em andamento para a comanda "
                     + participante.getComanda().getNumero() + ". Cancele o pagamento antes de remover a inscrição do evento");
         }
         participanteRepository.delete(participante);

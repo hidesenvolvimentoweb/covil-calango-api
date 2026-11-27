@@ -17,11 +17,18 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
  * Integração com a API de pagamentos do Mercado Pago (Checkout Transparente / API de Pagamentos).
+ * <p>
+ * Cada produto usa as credenciais da sua aplicação no Mercado Pago: o PIX e o cartão, as do Checkout Transparente
+ * (MERCADOPAGO_ACCESS_TOKEN); a preferência do Checkout Pro, as do Checkout Pro (MERCADOPAGO_PRO_ACCESS_TOKEN). Sem o
+ * token do Checkout Pro, a preferência usa o do Transparente. As consultas, cancelamentos e estornos usam o token do
+ * Transparente: as duas aplicações são da mesma conta, que é a dona dos pagamentos.
  *
  * @see <a href="https://www.mercadopago.com.br/developers/pt/reference/payments/_payments/post">Criar pagamento</a>
  */
@@ -32,32 +39,55 @@ public class MercadoPagoGateway implements GatewayPagamento {
     public static final String NOME = "MERCADO_PAGO";
     /** Rota do webhook nesta API (ver PagamentoController). */
     public static final String ROTA_WEBHOOK = "/api/pagamento/webhook/mercadopago";
+    /** Página para onde o Mercado Pago devolve o cliente ao fim do Checkout Pro; ela reabre o app (PagamentoController). */
+    public static final String ROTA_RETORNO = "/api/pagamento/retorno/mercadopago";
+    /**
+     * Categoria do item no Mercado Pago (usada na análise antifraude): a comanda reúne consumo e entretenimento da
+     * loja (jogos, torneios e lanches).
+     */
+    static final String CATEGORIA_ITEM = "entertainment";
+    /** Limite do Mercado Pago para o nome na fatura do cartão. */
+    private static final int TAMANHO_MAXIMO_DESCRITOR = 22;
 
     private static final String ENDPOINT_PAGAMENTOS = "/v1/payments";
+    private static final String ENDPOINT_PREFERENCIAS = "/checkout/preferences";
+    /** Na conta do Mercado Pago, só cartão de crédito ou débito (sem saldo, boleto ou pré-pago). */
+    private static final List<String> TIPOS_FORA_DA_CARTEIRA =
+            List.of("account_money", "ticket", "bank_transfer", "atm", "prepaid_card");
     /** Formato aceito pelo Mercado Pago em date_of_expiration (ex.: 2026-11-22T20:30:00.000-03:00). */
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
     private static final int TIMEOUT_CONEXAO_MS = 5_000;
     private static final int TIMEOUT_LEITURA_MS = 20_000;
 
     private final RestClient restClient;
+    /** Cliente com o token da aplicação do Checkout Pro (preferências). */
+    private final RestClient restClientCheckoutPro;
     private final boolean configurado;
     /** URL completa do webhook; nula sem API_URL (ex.: ambiente local), quando só a reconciliação confirma o PIX. */
     private final String urlNotificacao;
+    /** Página de retorno do Checkout Pro; nula sem API_URL (o Mercado Pago não aceita localhost em back_urls). */
+    private final String urlRetorno;
+    /** Nome da loja na fatura do cartão (statement_descriptor); diminui as contestações. */
+    private final String descritorFatura;
 
     @Autowired
     public MercadoPagoGateway(RestClient.Builder builder,
                               @Value("${app.mercadopago.base-url:https://api.mercadopago.com}") String baseUrl,
                               @Value("${app.mercadopago.access-token:}") String accessToken,
-                              @Value("${app.api.url:}") String apiUrl) {
-        this(criarRestClient(builder, baseUrl, normalizarToken(accessToken)), !normalizarToken(accessToken).isEmpty(),
-                montarUrlNotificacao(apiUrl));
+                              @Value("${app.mercadopago.checkout-pro.access-token:}") String accessTokenCheckoutPro,
+                              @Value("${app.api.url:}") String apiUrl,
+                              @Value("${app.mercadopago.statement-descriptor:COVILDOCALANGO}") String descritorFatura) {
+        this(criarRestClient(builder, baseUrl, normalizarToken(accessToken)),
+                criarRestClient(builder, baseUrl, normalizarToken(accessTokenCheckoutPro).isEmpty()
+                        ? normalizarToken(accessToken) : normalizarToken(accessTokenCheckoutPro)),
+                !normalizarToken(accessToken).isEmpty(), apiUrl, descritorFatura);
     }
 
     /**
      * Remove espaços, quebras de linha (ex.: o "\r" de um .env salvo no Windows) e aspas em volta do token, que
      * fariam o Mercado Pago recusar a autenticação (401).
      */
-    static String normalizarToken(String token) {
+    public static String normalizarToken(String token) {
         if (token == null) {
             return "";
         }
@@ -69,10 +99,21 @@ public class MercadoPagoGateway implements GatewayPagamento {
         return normalizado;
     }
 
-    MercadoPagoGateway(RestClient restClient, boolean configurado, String urlNotificacao) {
+    MercadoPagoGateway(RestClient restClient, boolean configurado, String apiUrl) {
+        this(restClient, restClient, configurado, apiUrl, "COVILDOCALANGO");
+    }
+
+    MercadoPagoGateway(RestClient restClient, RestClient restClientCheckoutPro, boolean configurado, String apiUrl,
+                       String descritorFatura) {
         this.restClient = restClient;
+        this.restClientCheckoutPro = restClientCheckoutPro;
         this.configurado = configurado;
-        this.urlNotificacao = urlNotificacao;
+        this.urlNotificacao = montarUrlNotificacao(apiUrl);
+        String base = semBarraFinal(apiUrl);
+        this.urlRetorno = base == null ? null : base + ROTA_RETORNO;
+        String descritor = descritorFatura == null ? "" : descritorFatura.strip();
+        this.descritorFatura = descritor.isEmpty() ? null
+                : descritor.substring(0, Math.min(descritor.length(), TAMANHO_MAXIMO_DESCRITOR));
     }
 
     /**
@@ -80,11 +121,16 @@ public class MercadoPagoGateway implements GatewayPagamento {
      * sem as do formato IPN legado.
      */
     static String montarUrlNotificacao(String apiUrl) {
+        String base = semBarraFinal(apiUrl);
+        return base == null ? null : base + ROTA_WEBHOOK + "?source_news=webhooks";
+    }
+
+    private static String semBarraFinal(String apiUrl) {
         if (apiUrl == null || apiUrl.isBlank()) {
             return null;
         }
-        String base = apiUrl.endsWith("/") ? apiUrl.substring(0, apiUrl.length() - 1) : apiUrl;
-        return base + ROTA_WEBHOOK + "?source_news=webhooks";
+        String base = apiUrl.strip();
+        return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
     }
 
     private static RestClient criarRestClient(RestClient.Builder builder, String baseUrl, String accessToken) {
@@ -149,21 +195,173 @@ public class MercadoPagoGateway implements GatewayPagamento {
                 texto(dadosPix, "qr_code_base64"));
     }
 
+    /**
+     * Cobrança à vista com o token do cartão. A verificação do banco (3DS) é pedida quando o emissor exige: o
+     * pagamento fica "pending_challenge" e a resposta traz o endereço do desafio, exibido no app.
+     */
     @Override
-    public SituacaoPagamento consultar(String gatewayId) {
-        JsonNode resposta = chamar("consultar o pagamento", () -> restClient.get()
-                .uri(ENDPOINT_PAGAMENTOS + "/{id}", gatewayId)
+    public SituacaoPagamento pagarComCartao(SolicitacaoPagamentoCartao solicitacao) {
+        Map<String, Object> pagador = new LinkedHashMap<>();
+        pagador.put("email", solicitacao.emailPagador());
+        if (solicitacao.documento() != null) {
+            pagador.put("identification", Map.of("type", solicitacao.tipoDocumento(), "number", solicitacao.documento()));
+        }
+
+        Map<String, Object> corpo = new LinkedHashMap<>();
+        corpo.put("transaction_amount", solicitacao.valor());
+        corpo.put("token", solicitacao.token());
+        corpo.put("description", solicitacao.descricao());
+        corpo.put("installments", 1);
+        corpo.put("payment_method_id", solicitacao.bandeira());
+        if (solicitacao.emissorId() != null) {
+            corpo.put("issuer_id", solicitacao.emissorId());
+        }
+        corpo.put("payer", pagador);
+        corpo.put("external_reference", solicitacao.referencia());
+        corpo.put("three_d_secure_mode", "optional");
+        if (urlNotificacao != null) {
+            corpo.put("notification_url", urlNotificacao);
+        }
+
+        return situacao(chamar("cobrar o cartão", () -> restClient.post()
+                .uri(ENDPOINT_PAGAMENTOS)
+                .header("X-Idempotency-Key", solicitacao.idempotencyKey())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(corpo)
+                .retrieve()
+                .body(JsonNode.class)), null);
+    }
+
+    /**
+     * Preferência do Checkout Pro só para quem tem conta no Mercado Pago (wallet_purchase), à vista e só com cartão
+     * de crédito ou débito. binary_mode: o pagamento é aprovado ou recusado na hora, sem ficar em análise.
+     * <p>
+     * Ao terminar, o Mercado Pago devolve o cliente à página de retorno (back_urls), que reabre o app; com o pagamento
+     * aprovado o retorno é automático (auto_return). A confirmação continua vindo só do webhook e da consulta ao
+     * Mercado Pago: os parâmetros do retorno não são usados.
+     */
+    @Override
+    public PreferenciaCheckout criarPreferencia(SolicitacaoPreferencia solicitacao) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", solicitacao.referencia());
+        item.put("title", solicitacao.descricao());
+        item.put("description", solicitacao.descricao());
+        item.put("category_id", CATEGORIA_ITEM);
+        item.put("quantity", 1);
+        item.put("currency_id", "BRL");
+        item.put("unit_price", solicitacao.valor());
+
+        Map<String, Object> corpo = new LinkedHashMap<>();
+        corpo.put("items", List.of(item));
+        Map<String, Object> pagador = pagadorDaPreferencia(solicitacao);
+        if (!pagador.isEmpty()) {
+            corpo.put("payer", pagador);
+        }
+        corpo.put("external_reference", solicitacao.referencia());
+        if (descritorFatura != null) {
+            corpo.put("statement_descriptor", descritorFatura);
+        }
+        corpo.put("purpose", "wallet_purchase");
+        corpo.put("binary_mode", true);
+        corpo.put("payment_methods", Map.of(
+                "installments", 1,
+                "excluded_payment_types", TIPOS_FORA_DA_CARTEIRA.stream().map(tipo -> Map.of("id", tipo)).toList()));
+        corpo.put("expires", true);
+        corpo.put("expiration_date_to", FORMATO_DATA.format(solicitacao.expiraEm()));
+        if (urlNotificacao != null) {
+            corpo.put("notification_url", urlNotificacao);
+        }
+        if (urlRetorno != null) {
+            corpo.put("back_urls", Map.of(
+                    "success", urlRetorno + "?resultado=aprovado",
+                    "pending", urlRetorno + "?resultado=pendente",
+                    "failure", urlRetorno + "?resultado=recusado"));
+            corpo.put("auto_return", "approved");
+        }
+
+        JsonNode resposta = chamar("criar o pagamento pelo Mercado Pago", () -> restClientCheckoutPro.post()
+                .uri(ENDPOINT_PREFERENCIAS)
+                .header("X-Idempotency-Key", solicitacao.idempotencyKey())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(corpo)
                 .retrieve()
                 .body(JsonNode.class));
-        String statusGateway = texto(resposta, "status");
-        JsonNode valor = resposta.path("transaction_amount");
-        return new SituacaoPagamento(
-                resposta.path("id").asText(gatewayId),
-                converterStatus(statusGateway, texto(resposta, "status_detail")),
-                statusGateway,
-                texto(resposta, "external_reference"),
-                valor.isNumber() ? valor.decimalValue() : null,
-                data(texto(resposta, "date_approved")));
+        String url = texto(resposta, "init_point");
+        if (url == null) {
+            throw new GatewayPagamentoException("O Mercado Pago não devolveu o link de pagamento", 0, null);
+        }
+        return new PreferenciaCheckout(resposta.path("id").asText(), url);
+    }
+
+    /**
+     * Dados do pagador que o cliente informou: nome (dividido em nome e sobrenome), e-mail do cadastro e celular.
+     * Só o que existe é enviado.
+     */
+    static Map<String, Object> pagadorDaPreferencia(SolicitacaoPreferencia solicitacao) {
+        Map<String, Object> pagador = new LinkedHashMap<>();
+        String nome = solicitacao.nomePagador() == null ? "" : solicitacao.nomePagador().strip().replaceAll("\\s+", " ");
+        if (!nome.isEmpty()) {
+            int espaco = nome.indexOf(' ');
+            pagador.put("name", espaco < 0 ? nome : nome.substring(0, espaco));
+            if (espaco > 0) {
+                pagador.put("surname", nome.substring(espaco + 1));
+            }
+        }
+        if (solicitacao.emailPagador() != null && !solicitacao.emailPagador().isBlank()) {
+            pagador.put("email", solicitacao.emailPagador().strip());
+        }
+        String celular = solicitacao.celularPagador() == null ? "" : solicitacao.celularPagador().replaceAll("\\D", "");
+        if (celular.length() >= 12 && celular.startsWith("55")) {
+            celular = celular.substring(2);
+        }
+        if (celular.length() == 10 || celular.length() == 11) {
+            pagador.put("phone", Map.of("area_code", celular.substring(0, 2), "number", celular.substring(2)));
+        }
+        return pagador;
+    }
+
+    @Override
+    public void expirarPreferencia(String preferenciaId) {
+        chamar("encerrar o link de pagamento", () -> restClientCheckoutPro.put()
+                .uri(ENDPOINT_PREFERENCIAS + "/{id}", preferenciaId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("expires", true, "expiration_date_to", FORMATO_DATA.format(OffsetDateTime.now())))
+                .retrieve()
+                .body(JsonNode.class));
+    }
+
+    @Override
+    public Optional<SituacaoPagamento> buscarPorReferencia(String referencia) {
+        JsonNode resposta = chamar("buscar o pagamento", () -> restClient.get()
+                .uri(uri -> uri.path(ENDPOINT_PAGAMENTOS + "/search")
+                        .queryParam("external_reference", referencia)
+                        .queryParam("sort", "date_created")
+                        .queryParam("criteria", "desc")
+                        .build())
+                .retrieve()
+                .body(JsonNode.class));
+        JsonNode escolhido = null;
+        for (JsonNode pagamento : resposta.path("results")) {
+            if (!referencia.equals(texto(pagamento, "external_reference"))) {
+                continue;
+            }
+            if ("approved".equals(texto(pagamento, "status"))) {
+                escolhido = pagamento;
+                break;
+            }
+            if (escolhido == null) {
+                escolhido = pagamento;
+            }
+        }
+        return Optional.ofNullable(escolhido).map(pagamento -> situacao(pagamento, null));
+    }
+
+    @Override
+    public SituacaoPagamento consultar(String gatewayId) {
+        return situacao(chamar("consultar o pagamento", () -> restClient.get()
+                .uri(ENDPOINT_PAGAMENTOS + "/{id}", gatewayId)
+                .retrieve()
+                .body(JsonNode.class)), gatewayId);
     }
 
     @Override
@@ -174,6 +372,38 @@ public class MercadoPagoGateway implements GatewayPagamento {
                 .body(Map.of("status", "cancelled"))
                 .retrieve()
                 .body(JsonNode.class));
+    }
+
+    /** Estorno total; a chave de idempotência impede devolver o valor duas vezes. */
+    @Override
+    public void estornar(String gatewayId, String idempotencyKey) {
+        chamar("estornar o pagamento", () -> restClient.post()
+                .uri(ENDPOINT_PAGAMENTOS + "/{id}/refunds", gatewayId)
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of())
+                .retrieve()
+                .body(JsonNode.class));
+    }
+
+    private static SituacaoPagamento situacao(JsonNode resposta, String gatewayIdPadrao) {
+        String statusGateway = texto(resposta, "status");
+        String detalhe = texto(resposta, "status_detail");
+        JsonNode valor = resposta.path("transaction_amount");
+        JsonNode tresDs = resposta.path("three_ds_info");
+        return new SituacaoPagamento(
+                gatewayIdPadrao == null ? resposta.path("id").asText() : resposta.path("id").asText(gatewayIdPadrao),
+                converterStatus(statusGateway, detalhe),
+                statusGateway,
+                texto(resposta, "external_reference"),
+                valor.isNumber() ? valor.decimalValue() : null,
+                data(texto(resposta, "date_approved")),
+                detalhe,
+                texto(resposta, "payment_method_id"),
+                texto(resposta.path("card"), "last_four_digits"),
+                texto(tresDs, "external_resource_url"),
+                texto(tresDs, "creq"),
+                texto(resposta, "payment_type_id"));
     }
 
     /**
@@ -188,7 +418,7 @@ public class MercadoPagoGateway implements GatewayPagamento {
         return switch (status) {
             case "approved", "in_mediation" -> StatusPagamentoEnum.PAGO;
             case "cancelled" -> "expired".equals(detalhe) ? StatusPagamentoEnum.EXPIRADO : StatusPagamentoEnum.CANCELADO;
-            case "rejected" -> StatusPagamentoEnum.CANCELADO;
+            case "rejected" -> StatusPagamentoEnum.RECUSADO;
             case "refunded", "charged_back" -> StatusPagamentoEnum.ESTORNADO;
             case "pending", "in_process", "authorized" -> StatusPagamentoEnum.PENDENTE;
             default -> {

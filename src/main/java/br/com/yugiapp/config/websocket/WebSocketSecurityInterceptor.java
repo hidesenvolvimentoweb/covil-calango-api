@@ -1,5 +1,6 @@
 package br.com.yugiapp.config.websocket;
 
+import br.com.yugiapp.controller.CozinhaController;
 import br.com.yugiapp.controller.PacoteController;
 import br.com.yugiapp.service.ComandaNotificacaoService;
 import br.com.yugiapp.config.security.AutenticacaoJwtService;
@@ -101,6 +102,8 @@ public class WebSocketSecurityInterceptor implements ChannelInterceptor {
             permitido = AutenticacaoJwtService.possuiAlguma(autenticacao, exigir(WEB_COMANDAS, WEB_DASHBOARD));
         } else if (PacoteController.TOPICO_PACOTES.equals(destino)) {
             permitido = AutenticacaoJwtService.possuiAlguma(autenticacao, exigir(WEB_PACOTES));
+        } else if (CozinhaController.TOPICO_COZINHA.equals(destino)) {
+            permitido = AutenticacaoJwtService.possuiAlguma(autenticacao, exigir(APP_CARDAPIO, WEB_PEDIDOS));
         } else if (TOPICO_PEDIDOS.equals(destino)) {
             permitido = AutenticacaoJwtService.possuiAlguma(autenticacao, exigir(WEB_PEDIDOS, WEB_DASHBOARD));
         } else if ((comanda = TOPICO_COMANDA.matcher(destino)).matches()) {
