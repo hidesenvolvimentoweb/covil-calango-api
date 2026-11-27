@@ -44,14 +44,15 @@ class PagamentoServiceTest {
     private final ComandaRepository comandaRepository = mock(ComandaRepository.class);
     private final ComandaService comandaService = mock(ComandaService.class);
     private final GatewayPagamento gateway = mock(GatewayPagamento.class);
+    private final CartaoSalvoService cartaoSalvoService = mock(CartaoSalvoService.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private PagamentoService service;
     private Comanda comanda;
 
     @BeforeEach
     void configurar() {
-        service = new PagamentoService(pagamentoRepository, comandaRepository, comandaService, gateway, eventPublisher,
-                mock(PlatformTransactionManager.class), 30, "cliente@covil.local");
+        service = new PagamentoService(pagamentoRepository, comandaRepository, comandaService, gateway, cartaoSalvoService,
+                eventPublisher, mock(PlatformTransactionManager.class), 30, "cliente@covil.local");
         comanda = Comanda.builder().id(1L).numero(COMANDA).nomeCliente("Cliente")
                 .status(StatusComandaEnum.ABERTA.getValue()).build();
         when(gateway.isConfigurado()).thenReturn(true);

@@ -1,9 +1,11 @@
 package br.com.yugiapp.controller;
 
 import br.com.yugiapp.config.security.AcessoService;
+import br.com.yugiapp.dto.CartoesSalvosDTO;
 import br.com.yugiapp.dto.PagamentoCartaoRequestDTO;
 import br.com.yugiapp.dto.PagamentoConfiguracaoDTO;
 import br.com.yugiapp.dto.PagamentoResponseDTO;
+import br.com.yugiapp.service.CartaoSalvoService;
 import br.com.yugiapp.service.ComandaNotificacaoService;
 import br.com.yugiapp.service.PagamentoService;
 import br.com.yugiapp.service.pagamento.MercadoPagoWebhookValidator;
@@ -35,6 +37,7 @@ public class PagamentoController {
     private static final Pattern ID_PAGAMENTO_VALIDO = Pattern.compile("[0-9A-Za-z-]{1,64}");
 
     private final PagamentoService pagamentoService;
+    private final CartaoSalvoService cartaoSalvoService;
     private final AcessoService acessoService;
     private final MercadoPagoWebhookValidator mercadoPagoWebhookValidator;
     private final ComandaNotificacaoService comandaNotificacaoService;
@@ -57,9 +60,27 @@ public class PagamentoController {
      * O resultado vem na resposta (e também em /topic/pagamentos/{numero}).
      */
     @PostMapping("/comanda/{numero}/cartao")
-    public PagamentoResponseDTO pagarComCartao(@PathVariable String numero, @RequestBody PagamentoCartaoRequestDTO request) {
+    public PagamentoResponseDTO pagarComCartao(@PathVariable String numero, @RequestBody PagamentoCartaoRequestDTO request,
+                                               @RequestHeader(value = CartaoSalvoService.CABECALHO_CHAVE, required = false)
+                                               String chaveAparelho) {
         acessoService.validarComanda(numero);
-        return pagamentoService.pagarComCartao(numero, request);
+        return pagamentoService.pagarComCartao(numero, request, chaveAparelho);
+    }
+
+    /** Cartões salvos neste celular (identificado pelo cabeçalho X-Chave-Aparelho). Só o cliente, pelo app. */
+    @GetMapping("/cartoes")
+    public CartoesSalvosDTO cartoesSalvos(@RequestHeader(value = CartaoSalvoService.CABECALHO_CHAVE, required = false)
+                                          String chaveAparelho) {
+        return cartaoSalvoService.listar(chaveAparelho);
+    }
+
+    /** Remove um cartão salvo neste celular. */
+    @DeleteMapping("/cartoes/{cartaoId}")
+    public ResponseEntity<Void> excluirCartaoSalvo(@PathVariable String cartaoId,
+                                                   @RequestHeader(value = CartaoSalvoService.CABECALHO_CHAVE, required = false)
+                                                   String chaveAparelho) {
+        cartaoSalvoService.excluir(chaveAparelho, cartaoId);
+        return ResponseEntity.noContent().build();
     }
 
     /** Link para o cliente pagar na própria conta do Mercado Pago (cartão salvo lá). Só o cliente, pelo app. */
@@ -94,8 +115,8 @@ public class PagamentoController {
     }
 
     /**
-     * Notificações (Webhooks) do Mercado Pago. Rota pública: a assinatura é conferida quando
-     * MERCADOPAGO_WEBHOOK_SECRET está configurado e o pagamento é sempre consultado no Mercado Pago.
+     * Notificações (Webhooks) do Mercado Pago. Rota pública: a assinatura é conferida quando há alguma chave secreta
+     * configurada (MERCADOPAGO_QRCODE_, _CARTAO_ ou _PRO_WEBHOOK_SECRET) e o pagamento é sempre consultado no Mercado Pago.
      * Responde 200 rapidamente; um erro (5xx) faz o Mercado Pago reenviar a notificação.
      */
     @PostMapping("/webhook/mercadopago")

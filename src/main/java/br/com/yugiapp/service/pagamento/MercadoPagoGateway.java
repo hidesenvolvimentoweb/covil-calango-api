@@ -16,19 +16,29 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * Integração com a API de pagamentos do Mercado Pago (Checkout Transparente / API de Pagamentos).
  * <p>
- * Cada produto usa as credenciais da sua aplicação no Mercado Pago: o PIX e o cartão, as do Checkout Transparente
- * (MERCADOPAGO_ACCESS_TOKEN); a preferência do Checkout Pro, as do Checkout Pro (MERCADOPAGO_PRO_ACCESS_TOKEN). Sem o
- * token do Checkout Pro, a preferência usa o do Transparente. As consultas, cancelamentos e estornos usam o token do
- * Transparente: as duas aplicações são da mesma conta, que é a dona dos pagamentos.
+ * Cada produto usa as credenciais da sua aplicação no Mercado Pago:
+ * <ul>
+ *   <li>PIX: aplicação do QR Code (MERCADOPAGO_QRCODE_ACCESS_TOKEN);</li>
+ *   <li>cartão digitado: Checkout Transparente (MERCADOPAGO_CARTAO_ACCESS_TOKEN, par da MERCADOPAGO_CARTAO_PUBLIC_KEY que o
+ *   app usa para gerar o token do cartão);</li>
+ *   <li>preferência do Checkout Pro: Checkout Pro (MERCADOPAGO_PRO_ACCESS_TOKEN).</li>
+ * </ul>
+ * Sem o token do cartão ou do Checkout Pro, eles usam o MERCADOPAGO_QRCODE_ACCESS_TOKEN.
+ * <p>
+ * Consultas, cancelamentos e estornos só recebem o id do pagamento: tentam o token de cada aplicação, na ordem PIX,
+ * cartão e Checkout Pro, até achar o pagamento (as aplicações podem ser de contas diferentes, como as de teste).
  *
  * @see <a href="https://www.mercadopago.com.br/developers/pt/reference/payments/_payments/post">Criar pagamento</a>
  */
@@ -51,6 +61,7 @@ public class MercadoPagoGateway implements GatewayPagamento {
 
     private static final String ENDPOINT_PAGAMENTOS = "/v1/payments";
     private static final String ENDPOINT_PREFERENCIAS = "/checkout/preferences";
+    private static final String ENDPOINT_CLIENTES = "/v1/customers";
     /**
      * Na conta do Mercado Pago: cartão de crédito, débito ou o saldo da conta (sem boleto, PIX ou pré-pago). O saldo
      * (account_money) não pode ser excluído quando a preferência é só para quem tem conta (wallet_purchase): o
@@ -65,9 +76,14 @@ public class MercadoPagoGateway implements GatewayPagamento {
     private static final int TIMEOUT_CONEXAO_MS = 5_000;
     private static final int TIMEOUT_LEITURA_MS = 20_000;
 
+    /** Cliente com o token da aplicação do QR Code (PIX). */
     private final RestClient restClient;
+    /** Cliente com o token da aplicação do Checkout Transparente (cartão digitado). */
+    private final RestClient restClientCartao;
     /** Cliente com o token da aplicação do Checkout Pro (preferências). */
     private final RestClient restClientCheckoutPro;
+    /** Clientes distintos, na ordem em que as consultas procuram o pagamento. */
+    private final List<RestClient> clientesDeConsulta;
     private final boolean configurado;
     /** URL completa do webhook; nula sem API_URL (ex.: ambiente local), quando só a reconciliação confirma o PIX. */
     private final String urlNotificacao;
@@ -79,14 +95,31 @@ public class MercadoPagoGateway implements GatewayPagamento {
     @Autowired
     public MercadoPagoGateway(RestClient.Builder builder,
                               @Value("${app.mercadopago.base-url:https://api.mercadopago.com}") String baseUrl,
-                              @Value("${app.mercadopago.access-token:}") String accessToken,
+                              @Value("${app.mercadopago.qrcode.access-token:}") String accessToken,
+                              @Value("${app.mercadopago.cartao.access-token:}") String accessTokenCartao,
                               @Value("${app.mercadopago.checkout-pro.access-token:}") String accessTokenCheckoutPro,
                               @Value("${app.api.url:}") String apiUrl,
                               @Value("${app.mercadopago.statement-descriptor:COVILDOCALANGO}") String descritorFatura) {
-        this(criarRestClient(builder, baseUrl, normalizarToken(accessToken)),
-                criarRestClient(builder, baseUrl, normalizarToken(accessTokenCheckoutPro).isEmpty()
-                        ? normalizarToken(accessToken) : normalizarToken(accessTokenCheckoutPro)),
+        this(clientesPorToken(builder, baseUrl, accessToken, accessTokenCartao, accessTokenCheckoutPro),
                 !normalizarToken(accessToken).isEmpty(), apiUrl, descritorFatura);
+    }
+
+    private MercadoPagoGateway(List<RestClient> clientes, boolean configurado, String apiUrl, String descritorFatura) {
+        this(clientes.get(0), clientes.get(1), clientes.get(2), configurado, apiUrl, descritorFatura);
+    }
+
+    /**
+     * Um cliente para cada token, na ordem PIX, cartão e Checkout Pro. O token vazio usa o do PIX, e tokens iguais
+     * compartilham o mesmo cliente (a consulta não repete a chamada na mesma conta).
+     */
+    private static List<RestClient> clientesPorToken(RestClient.Builder builder, String baseUrl, String tokenPix,
+                                                     String tokenCartao, String tokenCheckoutPro) {
+        String pix = normalizarToken(tokenPix);
+        Map<String, RestClient> porToken = new LinkedHashMap<>();
+        return Stream.of(pix, normalizarToken(tokenCartao), normalizarToken(tokenCheckoutPro))
+                .map(token -> token.isEmpty() ? pix : token)
+                .map(token -> porToken.computeIfAbsent(token, chave -> criarRestClient(builder, baseUrl, chave)))
+                .toList();
     }
 
     /**
@@ -106,13 +139,15 @@ public class MercadoPagoGateway implements GatewayPagamento {
     }
 
     MercadoPagoGateway(RestClient restClient, boolean configurado, String apiUrl) {
-        this(restClient, restClient, configurado, apiUrl, "COVILDOCALANGO");
+        this(restClient, restClient, restClient, configurado, apiUrl, "COVILDOCALANGO");
     }
 
-    MercadoPagoGateway(RestClient restClient, RestClient restClientCheckoutPro, boolean configurado, String apiUrl,
-                       String descritorFatura) {
+    MercadoPagoGateway(RestClient restClient, RestClient restClientCartao, RestClient restClientCheckoutPro,
+                       boolean configurado, String apiUrl, String descritorFatura) {
         this.restClient = restClient;
+        this.restClientCartao = restClientCartao;
         this.restClientCheckoutPro = restClientCheckoutPro;
+        this.clientesDeConsulta = Stream.of(restClient, restClientCartao, restClientCheckoutPro).distinct().toList();
         this.configurado = configurado;
         this.urlNotificacao = montarUrlNotificacao(apiUrl);
         String base = semBarraFinal(apiUrl);
@@ -208,7 +243,13 @@ public class MercadoPagoGateway implements GatewayPagamento {
     @Override
     public SituacaoPagamento pagarComCartao(SolicitacaoPagamentoCartao solicitacao) {
         Map<String, Object> pagador = new LinkedHashMap<>();
-        pagador.put("email", solicitacao.emailPagador());
+        if (solicitacao.clienteId() != null) {
+            // Aparelho com cartões salvos: o pagador é o cliente salvo (exigido para cobrar um cartão salvo).
+            pagador.put("type", "customer");
+            pagador.put("id", solicitacao.clienteId());
+        } else {
+            pagador.put("email", solicitacao.emailPagador());
+        }
         if (solicitacao.documento() != null) {
             pagador.put("identification", Map.of("type", solicitacao.tipoDocumento(), "number", solicitacao.documento()));
         }
@@ -229,7 +270,7 @@ public class MercadoPagoGateway implements GatewayPagamento {
             corpo.put("notification_url", urlNotificacao);
         }
 
-        return situacao(chamar("cobrar o cartão", () -> restClient.post()
+        return situacao(chamar("cobrar o cartão", () -> restClientCartao.post()
                 .uri(ENDPOINT_PAGAMENTOS)
                 .header("X-Idempotency-Key", solicitacao.idempotencyKey())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -338,7 +379,17 @@ public class MercadoPagoGateway implements GatewayPagamento {
 
     @Override
     public Optional<SituacaoPagamento> buscarPorReferencia(String referencia) {
-        JsonNode resposta = chamar("buscar o pagamento", () -> restClient.get()
+        for (RestClient cliente : clientesDeConsulta) {
+            Optional<SituacaoPagamento> encontrado = buscarPorReferencia(cliente, referencia);
+            if (encontrado.isPresent()) {
+                return encontrado;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<SituacaoPagamento> buscarPorReferencia(RestClient cliente, String referencia) {
+        JsonNode resposta = chamar("buscar o pagamento", () -> cliente.get()
                 .uri(uri -> uri.path(ENDPOINT_PAGAMENTOS + "/search")
                         .queryParam("external_reference", referencia)
                         .queryParam("sort", "date_created")
@@ -364,7 +415,7 @@ public class MercadoPagoGateway implements GatewayPagamento {
 
     @Override
     public SituacaoPagamento consultar(String gatewayId) {
-        return situacao(chamar("consultar o pagamento", () -> restClient.get()
+        return situacao(chamarEmCadaConta("consultar o pagamento", cliente -> cliente.get()
                 .uri(ENDPOINT_PAGAMENTOS + "/{id}", gatewayId)
                 .retrieve()
                 .body(JsonNode.class)), gatewayId);
@@ -372,7 +423,7 @@ public class MercadoPagoGateway implements GatewayPagamento {
 
     @Override
     public void cancelar(String gatewayId) {
-        chamar("cancelar o pagamento", () -> restClient.put()
+        chamarEmCadaConta("cancelar o pagamento", cliente -> cliente.put()
                 .uri(ENDPOINT_PAGAMENTOS + "/{id}", gatewayId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("status", "cancelled"))
@@ -383,13 +434,84 @@ public class MercadoPagoGateway implements GatewayPagamento {
     /** Estorno total; a chave de idempotência impede devolver o valor duas vezes. */
     @Override
     public void estornar(String gatewayId, String idempotencyKey) {
-        chamar("estornar o pagamento", () -> restClient.post()
+        chamarEmCadaConta("estornar o pagamento", cliente -> cliente.post()
                 .uri(ENDPOINT_PAGAMENTOS + "/{id}/refunds", gatewayId)
                 .header("X-Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of())
                 .retrieve()
                 .body(JsonNode.class));
+    }
+
+    /**
+     * Cliente onde os cartões salvos ficam, na conta da aplicação do cartão. Se o e-mail já tem cliente (ex.: a
+     * resposta da criação se perdeu e o app tentou de novo), devolve o existente.
+     */
+    @Override
+    public String criarCliente(String email) {
+        try {
+            return chamar("criar o cliente", () -> restClientCartao.post()
+                    .uri(ENDPOINT_CLIENTES)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("email", email, "description", "Cliente do app (cartões salvos no celular)"))
+                    .retrieve()
+                    .body(JsonNode.class)).path("id").asText();
+        } catch (GatewayPagamentoException exception) {
+            if (exception.getStatusHttp() != 400) {
+                throw exception;
+            }
+            JsonNode existente = chamar("buscar o cliente", () -> restClientCartao.get()
+                    .uri(uri -> uri.path(ENDPOINT_CLIENTES + "/search").queryParam("email", email).build())
+                    .retrieve()
+                    .body(JsonNode.class)).path("results").path(0);
+            if (existente.isMissingNode()) {
+                throw exception;
+            }
+            return existente.path("id").asText();
+        }
+    }
+
+    @Override
+    public CartaoSalvo salvarCartao(String clienteId, String token) {
+        return cartaoSalvo(chamar("salvar o cartão", () -> restClientCartao.post()
+                .uri(ENDPOINT_CLIENTES + "/{id}/cards", clienteId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("token", token))
+                .retrieve()
+                .body(JsonNode.class)));
+    }
+
+    @Override
+    public List<CartaoSalvo> listarCartoes(String clienteId) {
+        JsonNode resposta = chamar("listar os cartões salvos", () -> restClientCartao.get()
+                .uri(ENDPOINT_CLIENTES + "/{id}/cards", clienteId)
+                .retrieve()
+                .body(JsonNode.class));
+        List<CartaoSalvo> cartoes = new ArrayList<>();
+        resposta.forEach(cartao -> cartoes.add(cartaoSalvo(cartao)));
+        return cartoes;
+    }
+
+    @Override
+    public void excluirCartao(String clienteId, String cartaoId) {
+        chamar("excluir o cartão salvo", () -> restClientCartao.delete()
+                .uri(ENDPOINT_CLIENTES + "/{cliente}/cards/{cartao}", clienteId, cartaoId)
+                .retrieve()
+                .body(JsonNode.class));
+    }
+
+    private static CartaoSalvo cartaoSalvo(JsonNode cartao) {
+        JsonNode metodo = cartao.path("payment_method");
+        JsonNode mes = cartao.path("expiration_month");
+        JsonNode ano = cartao.path("expiration_year");
+        return new CartaoSalvo(
+                cartao.path("id").asText(),
+                texto(metodo, "id"),
+                texto(metodo, "name"),
+                texto(metodo, "payment_type_id"),
+                texto(cartao, "last_four_digits"),
+                mes.isNumber() ? mes.asInt() : null,
+                ano.isNumber() ? ano.asInt() : null);
     }
 
     private static SituacaoPagamento situacao(JsonNode resposta, String gatewayIdPadrao) {
@@ -436,7 +558,7 @@ public class MercadoPagoGateway implements GatewayPagamento {
 
     private JsonNode chamar(String operacao, Supplier<JsonNode> chamada) {
         if (!configurado) {
-            throw new GatewayPagamentoException("Mercado Pago não configurado (MERCADOPAGO_ACCESS_TOKEN)", 0, null);
+            throw new GatewayPagamentoException("Mercado Pago não configurado (MERCADOPAGO_QRCODE_ACCESS_TOKEN)", 0, null);
         }
         try {
             JsonNode resposta = chamada.get();
@@ -448,7 +570,7 @@ public class MercadoPagoGateway implements GatewayPagamento {
             log.error("Mercado Pago recusou {} (status {}): {}", operacao, exception.getStatusCode().value(),
                     exception.getResponseBodyAsString());
             if (exception.getStatusCode().value() == 401) {
-                log.error("Access Token do Mercado Pago recusado: confira MERCADOPAGO_ACCESS_TOKEN (copie o Access Token, "
+                log.error("Access Token do Mercado Pago recusado: confira MERCADOPAGO_QRCODE_ACCESS_TOKEN (copie o Access Token, "
                         + "não a Public Key) e recrie o container para recarregar o .env");
             }
             throw new GatewayPagamentoException("Mercado Pago recusou " + operacao, exception.getStatusCode().value(), exception);
@@ -456,6 +578,25 @@ public class MercadoPagoGateway implements GatewayPagamento {
             log.error("Falha de comunicação com o Mercado Pago ao {}", operacao, exception);
             throw new GatewayPagamentoException("Falha de comunicação com o Mercado Pago ao " + operacao, 0, exception);
         }
+    }
+
+    /**
+     * Operação sobre um pagamento que já existe: tenta o token de cada aplicação até a conta dona do pagamento
+     * responder. Só o "não encontrado" (404) passa para o próximo token; qualquer outra recusa é devolvida na hora.
+     */
+    private JsonNode chamarEmCadaConta(String operacao, Function<RestClient, JsonNode> chamada) {
+        GatewayPagamentoException naoEncontrado = null;
+        for (RestClient cliente : clientesDeConsulta) {
+            try {
+                return chamar(operacao, () -> chamada.apply(cliente));
+            } catch (GatewayPagamentoException exception) {
+                if (exception.getStatusHttp() != 404) {
+                    throw exception;
+                }
+                naoEncontrado = exception;
+            }
+        }
+        throw naoEncontrado;
     }
 
     private static String texto(JsonNode no, String campo) {

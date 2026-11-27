@@ -48,14 +48,16 @@ class PagamentoCartaoServiceTest {
     private final ComandaRepository comandaRepository = mock(ComandaRepository.class);
     private final ComandaService comandaService = mock(ComandaService.class);
     private final GatewayPagamento gateway = mock(GatewayPagamento.class);
+    /** Sem cartões salvos por padrão (Optional vazio). */
+    private final CartaoSalvoService cartaoSalvoService = mock(CartaoSalvoService.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private PagamentoService service;
     private Comanda comanda;
 
     @BeforeEach
     void configurar() {
-        service = new PagamentoService(pagamentoRepository, comandaRepository, comandaService, gateway, eventPublisher,
-                mock(PlatformTransactionManager.class), 30, "cliente@covil.local");
+        service = new PagamentoService(pagamentoRepository, comandaRepository, comandaService, gateway, cartaoSalvoService,
+                eventPublisher, mock(PlatformTransactionManager.class), 30, "cliente@covil.local");
         service.setPublicKey("TEST-chave-publica");
         comanda = Comanda.builder().id(1L).numero(COMANDA).nomeCliente("Cliente")
                 .status(StatusComandaEnum.ABERTA.getValue()).build();
@@ -209,6 +211,67 @@ class PagamentoCartaoServiceTest {
                             e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
         }
         verify(gateway, never()).pagarComCartao(any());
+    }
+
+    private static final String CHAVE_APARELHO = "chave-do-aparelho-0123456789abcdef0123456789";
+
+    @Test
+    void celularComCartoesSalvosCobraComoClienteSalvoSemPedirEmailNemDocumento() {
+        when(cartaoSalvoService.clienteDoAparelho(CHAVE_APARELHO)).thenReturn(Optional.of("cliente-1"));
+        when(gateway.pagarComCartao(any())).thenReturn(cartaoNoProvedor(StatusPagamentoEnum.PAGO, "approved", "accredited"));
+        PagamentoCartaoRequestDTO cartaoSalvo = PagamentoCartaoRequestDTO.builder().token("tok_salvo").bandeira("visa")
+                .build();
+
+        PagamentoResponseDTO pagamento = service.pagarComCartao(COMANDA, cartaoSalvo, CHAVE_APARELHO);
+
+        ArgumentCaptor<SolicitacaoPagamentoCartao> solicitacao = ArgumentCaptor.forClass(SolicitacaoPagamentoCartao.class);
+        verify(gateway).pagarComCartao(solicitacao.capture());
+        assertThat(solicitacao.getValue().clienteId()).isEqualTo("cliente-1");
+        assertThat(solicitacao.getValue().documento()).isNull();
+        assertThat(pagamento.getStatus()).isEqualTo(StatusPagamentoEnum.PAGO);
+        // Não pediu para salvar: a resposta não fala do cartão salvo.
+        assertThat(pagamento.getCartaoSalvo()).isNull();
+        verify(cartaoSalvoService, never()).salvar(any(), any());
+    }
+
+    @Test
+    void salvaOCartaoNoCelularDepoisDaCobrancaAprovada() {
+        when(gateway.pagarComCartao(any())).thenReturn(cartaoNoProvedor(StatusPagamentoEnum.PAGO, "approved", "accredited"));
+        when(cartaoSalvoService.salvar(CHAVE_APARELHO, "tok_123")).thenReturn(true);
+        PagamentoCartaoRequestDTO novo = cartao();
+        novo.setSalvarCartao(true);
+
+        PagamentoResponseDTO pagamento = service.pagarComCartao(COMANDA, novo, CHAVE_APARELHO);
+
+        assertThat(pagamento.getCartaoSalvo()).isTrue();
+        verify(cartaoSalvoService).salvar(CHAVE_APARELHO, "tok_123");
+    }
+
+    @Test
+    void cartaoRecusadoNaoEhSalvo() {
+        when(gateway.pagarComCartao(any())).thenReturn(cartaoNoProvedor(StatusPagamentoEnum.RECUSADO, "rejected",
+                "cc_rejected_other_reason"));
+        PagamentoCartaoRequestDTO novo = cartao();
+        novo.setSalvarCartao(true);
+
+        PagamentoResponseDTO pagamento = service.pagarComCartao(COMANDA, novo, CHAVE_APARELHO);
+
+        assertThat(pagamento.getCartaoSalvo()).isFalse();
+        verify(cartaoSalvoService, never()).salvar(any(), any());
+    }
+
+    @Test
+    void falhaAoSalvarOCartaoNaoAfetaOPagamentoAprovado() {
+        when(gateway.pagarComCartao(any())).thenReturn(cartaoNoProvedor(StatusPagamentoEnum.PAGO, "approved", "accredited"));
+        when(cartaoSalvoService.salvar(any(), any())).thenThrow(new IllegalStateException("banco fora do ar"));
+        PagamentoCartaoRequestDTO novo = cartao();
+        novo.setSalvarCartao(true);
+
+        PagamentoResponseDTO pagamento = service.pagarComCartao(COMANDA, novo, CHAVE_APARELHO);
+
+        assertThat(pagamento.getStatus()).isEqualTo(StatusPagamentoEnum.PAGO);
+        assertThat(pagamento.getCartaoSalvo()).isFalse();
+        verify(comandaService).fechar(COMANDA, FormaPagamentoEnum.CREDITO);
     }
 
     @Test

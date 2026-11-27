@@ -82,19 +82,21 @@ public class PagamentoService {
     private final ComandaRepository comandaRepository;
     private final ComandaService comandaService;
     private final GatewayPagamento gateway;
+    private final CartaoSalvoService cartaoSalvoService;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final Duration expiracaoPix;
     private final String emailPagador;
 
     /** Chave pública do Mercado Pago, usada pelo formulário de cartão do app. Sem ela, o cartão fica indisponível. */
-    @Value("${app.mercadopago.public-key:}")
+    @Value("${app.mercadopago.cartao.public-key:}")
     private String publicKey;
 
     public PagamentoService(PagamentoRepository pagamentoRepository,
                             ComandaRepository comandaRepository,
                             ComandaService comandaService,
                             GatewayPagamento gateway,
+                            CartaoSalvoService cartaoSalvoService,
                             ApplicationEventPublisher eventPublisher,
                             PlatformTransactionManager transactionManager,
                             @Value("${app.pagamento.pix.expiracao-minutos:30}") long expiracaoMinutos,
@@ -103,6 +105,7 @@ public class PagamentoService {
         this.comandaRepository = comandaRepository;
         this.comandaService = comandaService;
         this.gateway = gateway;
+        this.cartaoSalvoService = cartaoSalvoService;
         this.eventPublisher = eventPublisher;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.expiracaoPix = Duration.ofMinutes(expiracaoMinutos);
@@ -160,8 +163,17 @@ public class PagamentoService {
      * </ul>
      * Um pagamento pendente anterior (PIX, cartão ou Mercado Pago) é cancelado antes da nova cobrança.
      */
-    @Transactional
     public PagamentoResponseDTO pagarComCartao(String numero, PagamentoCartaoRequestDTO request) {
+        return pagarComCartao(numero, request, null);
+    }
+
+    /**
+     * Como {@link #pagarComCartao(String, PagamentoCartaoRequestDTO)}, com o celular do cliente
+     * ({@code chaveAparelho}): se ele já salvou cartões, a cobrança vai para o cliente salvo no provedor (necessário
+     * para cobrar um cartão salvo); com {@code salvarCartao}, o cartão é salvo depois de uma cobrança não recusada.
+     */
+    @Transactional
+    public PagamentoResponseDTO pagarComCartao(String numero, PagamentoCartaoRequestDTO request, String chaveAparelho) {
         if (!getConfiguracao().cartao()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "O pagamento com cartão está indisponível no momento");
@@ -174,14 +186,15 @@ public class PagamentoService {
         if (aprovado.isPresent()) {
             return PagamentoResponseDTO.of(aprovado.get());
         }
+        String clienteId = cartaoSalvoService.clienteDoAparelho(chaveAparelho).orElse(null);
         Pagamento pagamento = novoPagamento(comanda, MetodoPagamentoEnum.CARTAO_CREDITO, valor,
                 LocalDateTime.now().plus(EXPIRACAO_CARTAO));
         SituacaoPagamento situacao;
         try {
             situacao = gateway.pagarComCartao(new SolicitacaoPagamentoCartao(
                     pagamento.getReferencia(), valor, descricao(comanda), cartao.getToken(), cartao.getBandeira(),
-                    cartao.getEmissorId(), cartao.getEmail(), cartao.getTipoDocumento(), cartao.getDocumento(),
-                    pagamento.getIdempotencyKey()));
+                    cartao.getEmissorId(), cartao.getEmail() == null ? emailPagador : cartao.getEmail(),
+                    cartao.getTipoDocumento(), cartao.getDocumento(), pagamento.getIdempotencyKey(), clienteId));
         } catch (GatewayPagamentoException exception) {
             if (exception.isRecusa()) {
                 // Recusado antes de cobrar (ex.: token inválido ou expirado): nada foi cobrado.
@@ -202,7 +215,22 @@ public class PagamentoService {
             pagamento.setDesafioUrl(situacao.desafioUrl());
             pagamento.setDesafioCreq(situacao.desafioCreq());
         }
-        return PagamentoResponseDTO.of(pagamento);
+        PagamentoResponseDTO resposta = PagamentoResponseDTO.of(pagamento);
+        if (Boolean.TRUE.equals(request.getSalvarCartao())) {
+            resposta.setCartaoSalvo(pagamento.getStatus() != StatusPagamentoEnum.RECUSADO
+                    && salvarCartao(chaveAparelho, cartao.getToken()));
+        }
+        return resposta;
+    }
+
+    /** Salvar o cartão é um extra: qualquer falha só deixa o cartão sem salvar, sem afetar o pagamento. */
+    private boolean salvarCartao(String chaveAparelho, String token) {
+        try {
+            return cartaoSalvoService.salvar(chaveAparelho, token);
+        } catch (RuntimeException exception) {
+            log.warn("Falha ao salvar o cartão no celular: {}", exception.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -661,13 +689,18 @@ public class PagamentoService {
         if (emissor != null && !EMISSOR_VALIDO.matcher(emissor).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Emissor do cartão inválido");
         }
-        String email = request.getEmail() == null ? "" : request.getEmail().trim();
-        if (email.length() > 254 || !EMAIL_VALIDO.matcher(email).matches()) {
+        // Com cartão salvo o formulário pede só o código de segurança: e-mail e documento ficam opcionais, mas
+        // precisam ser válidos quando informados.
+        String email = request.getEmail() == null || request.getEmail().isBlank() ? null : request.getEmail().trim();
+        if (email != null && (email.length() > 254 || !EMAIL_VALIDO.matcher(email).matches())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe um e-mail válido");
         }
         String tipo = request.getTipoDocumento() == null ? "" : request.getTipoDocumento().trim().toUpperCase();
         String documento = request.getDocumento() == null ? "" : request.getDocumento().replaceAll("\\D", "");
-        if (!TIPOS_DOCUMENTO.contains(tipo) || documento.length() != ("CPF".equals(tipo) ? 11 : 14)) {
+        if (tipo.isEmpty() && documento.isEmpty()) {
+            tipo = null;
+            documento = null;
+        } else if (!TIPOS_DOCUMENTO.contains(tipo) || documento.length() != ("CPF".equals(tipo) ? 11 : 14)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o CPF ou CNPJ do titular do cartão");
         }
         return PagamentoCartaoRequestDTO.builder()
@@ -677,6 +710,7 @@ public class PagamentoService {
                 .email(email)
                 .tipoDocumento(tipo)
                 .documento(documento)
+                .salvarCartao(request.getSalvarCartao())
                 .build();
     }
 

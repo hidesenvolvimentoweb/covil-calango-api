@@ -21,8 +21,14 @@ public class PagamentoCartaoRequestDTO {
     private String bandeira;
     /** Emissor (issuer_id), quando informado pelo formulário. */
     private String emissorId;
+    /** E-mail do titular; opcional com cartão salvo (o formulário não pede de novo). */
     private String email;
-    /** CPF ou CNPJ. */
+    /** CPF ou CNPJ; opcional com cartão salvo. */
     private String tipoDocumento;
     private String documento;
+    /**
+     * Salvar o cartão neste celular (o celular vai no cabeçalho X-Chave-Aparelho). O cartão é salvo depois da
+     * cobrança, se ela não for recusada.
+     */
+    private Boolean salvarCartao;
 }

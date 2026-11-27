@@ -55,6 +55,9 @@ public class PagamentoResponseDTO implements Serializable {
     /** Motivo da recusa do cartão, em texto para o cliente; somente quando recusado. */
     private String mensagemRecusa;
 
+    /** Resultado do pedido para salvar o cartão no celular; nulo quando não foi pedido. Só na resposta da cobrança. */
+    private Boolean cartaoSalvo;
+
     private LocalDateTime dataHoraCriacao;
 
     private LocalDateTime dataHoraExpiracao;

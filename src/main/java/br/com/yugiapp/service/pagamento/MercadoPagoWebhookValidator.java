@@ -18,8 +18,9 @@ import java.util.stream.Stream;
  * Valida a assinatura (cabeçalho {@code x-signature}) das notificações do Mercado Pago.
  * <p>
  * A assinatura é um HMAC-SHA256, com a chave secreta da aplicação, do texto
- * {@code id:[data.id];request-id:[x-request-id];ts:[ts];}. Cada aplicação do Mercado Pago (Checkout Transparente e
- * Checkout Pro) tem a sua chave; a notificação é aceita quando a assinatura confere com qualquer uma delas. Mesmo com a assinatura válida, a API nunca confia no
+ * {@code id:[data.id];request-id:[x-request-id];ts:[ts];}. Cada aplicação do Mercado Pago (QR Code do PIX, Checkout
+ * Transparente do cartão e Checkout Pro) tem a sua chave; a notificação é aceita quando a assinatura confere com
+ * qualquer uma delas. Mesmo com a assinatura válida, a API nunca confia no
  * conteúdo da notificação: o pagamento é sempre consultado no Mercado Pago antes de qualquer alteração.
  *
  * @see <a href="https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks">Webhooks</a>
@@ -32,9 +33,10 @@ public class MercadoPagoWebhookValidator {
     private final List<String> segredos;
 
     @Autowired
-    public MercadoPagoWebhookValidator(@Value("${app.mercadopago.webhook-secret:}") String segredo,
+    public MercadoPagoWebhookValidator(@Value("${app.mercadopago.qrcode.webhook-secret:}") String segredo,
+                                       @Value("${app.mercadopago.cartao.webhook-secret:}") String segredoCartao,
                                        @Value("${app.mercadopago.checkout-pro.webhook-secret:}") String segredoCheckoutPro) {
-        this.segredos = Stream.of(segredo, segredoCheckoutPro)
+        this.segredos = Stream.of(segredo, segredoCartao, segredoCheckoutPro)
                 .map(valor -> valor == null ? "" : valor.strip())
                 .filter(valor -> !valor.isEmpty())
                 .distinct()
@@ -42,7 +44,7 @@ public class MercadoPagoWebhookValidator {
     }
 
     MercadoPagoWebhookValidator(String segredo) {
-        this(segredo, null);
+        this(segredo, null, null);
     }
 
     /** Sem nenhuma chave secreta configurada (ex.: ambiente local) a assinatura não é exigida. */

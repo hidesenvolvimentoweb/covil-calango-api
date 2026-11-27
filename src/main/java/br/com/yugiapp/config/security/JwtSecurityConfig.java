@@ -103,6 +103,9 @@ public class JwtSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/pagamento/configuracao").hasAnyAuthority(exigir(APP_MINHA_COMANDA))
                         .requestMatchers(HttpMethod.POST, "/api/pagamento/comanda/*/cartao", "/api/pagamento/comanda/*/mercado-pago")
                         .hasAnyAuthority(exigir(APP_MINHA_COMANDA))
+                        // Cartões salvos no celular: só o cliente, pelo app (o celular vai no cabeçalho X-Chave-Aparelho).
+                        .requestMatchers(HttpMethod.GET, "/api/pagamento/cartoes").hasAnyAuthority(exigir(APP_MINHA_COMANDA))
+                        .requestMatchers(HttpMethod.DELETE, "/api/pagamento/cartoes/*").hasAnyAuthority(exigir(APP_MINHA_COMANDA))
                         // Estorno: devolve dinheiro ao cliente, então só o administrador.
                         .requestMatchers(HttpMethod.POST, "/api/pagamento/*/estorno").hasAuthority(PERFIL_ADMINISTRADOR)
                         .requestMatchers("/api/pagamento", "/api/pagamento/**").denyAll()

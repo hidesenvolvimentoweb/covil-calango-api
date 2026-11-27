@@ -126,6 +126,8 @@ class JwtSecurityConfigTest {
     private PagamentoService pagamentoService;
     @MockBean
     private MercadoPagoWebhookValidator mercadoPagoWebhookValidator;
+    @MockBean
+    private br.com.yugiapp.service.CartaoSalvoService cartaoSalvoService;
 
     @BeforeEach
     void configurarPermissoes() {
@@ -352,7 +354,7 @@ class JwtSecurityConfigTest {
 
     @Test
     void cartaoEMercadoPagoSaoDoClienteEOEstornoSoDoAdministrador() throws Exception {
-        when(pagamentoService.pagarComCartao(any(), any())).thenReturn(PagamentoResponseDTO.builder().comanda(COMANDA).build());
+        when(pagamentoService.pagarComCartao(any(), any(), any())).thenReturn(PagamentoResponseDTO.builder().comanda(COMANDA).build());
         when(pagamentoService.gerarPagamentoMercadoPago(COMANDA)).thenReturn(PagamentoResponseDTO.builder().comanda(COMANDA).build());
         when(pagamentoService.estornar(7L)).thenReturn(COMANDA);
         String cartao = "{\"token\":\"tok\",\"bandeira\":\"visa\",\"email\":\"a@b.com\",\"tipoDocumento\":\"CPF\",\"documento\":\"12345678909\"}";
@@ -384,6 +386,24 @@ class JwtSecurityConfigTest {
                 .andExpect(status().isOk());
         verify(pagamentoService).estornar(7L);
         verify(comandaNotificacaoService).notificarAlteracao(COMANDA);
+    }
+
+    @Test
+    void cartoesSalvosNoCelularSaoSoDoClienteDoApp() throws Exception {
+        String chave = "chave-do-aparelho-0123456789abcdef0123456789";
+        when(cartaoSalvoService.listar(chave)).thenReturn(new br.com.yugiapp.dto.CartoesSalvosDTO("cliente-1", List.of()));
+
+        mockMvc.perform(get("/api/pagamento/cartoes").header("Authorization", bearerVisitante(COMANDA))
+                        .header("X-Chave-Aparelho", chave))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/pagamento/cartoes/card-1").header("Authorization", bearerVisitante(COMANDA))
+                        .header("X-Chave-Aparelho", chave))
+                .andExpect(status().isNoContent());
+        verify(cartaoSalvoService).excluir(chave, "card-1");
+
+        mockMvc.perform(get("/api/pagamento/cartoes")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/pagamento/cartoes").cookie(cookie(List.of(ATENDENTE))))
+                .andExpect(status().isForbidden());
     }
 
     @Test
